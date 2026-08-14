@@ -80,7 +80,7 @@ jobs:
 
       - name: Upload Desktop resource test diagnostics
         if: failure()
-        uses: actions/upload-artifact@v6
+        uses: actions/upload-artifact@v7
         with:
           name: steward-desktop-resource-test-${{ github.sha }}
           path: |
@@ -296,7 +296,7 @@ jobs:
           Remove-Item -LiteralPath $credentialPath -Force
 
       - name: Upload exact acceptance package
-        uses: actions/upload-artifact@v6
+        uses: actions/upload-artifact@v7
         with:
           name: steward-windows-acceptance-${{ github.sha }}
           path: ${{ runner.temp }}/steward-windows-acceptance
@@ -305,7 +305,7 @@ jobs:
 
       - name: Upload downloadable Steam depot content
         if: ${{ github.event_name == 'workflow_dispatch' && github.event.inputs.steam_app_id != '' }}
-        uses: actions/upload-artifact@v6
+        uses: actions/upload-artifact@v7
         with:
           name: steward-v3-steam-depot-${{ github.event.inputs.steam_version }}
           path: ${{ runner.temp }}/steward-v3-steam-depot
@@ -314,7 +314,7 @@ jobs:
 
       - name: Upload Steam depot release evidence
         if: ${{ github.event_name == 'workflow_dispatch' && github.event.inputs.steam_app_id != '' }}
-        uses: actions/upload-artifact@v6
+        uses: actions/upload-artifact@v7
         with:
           name: steward-v3-steam-depot-evidence-${{ github.event.inputs.steam_version }}
           path: ${{ runner.temp }}/steward-v3-steam-evidence
@@ -323,7 +323,7 @@ jobs:
 
       - name: Upload downloadable Friends Build artifact
         if: ${{ github.event_name == 'workflow_dispatch' && github.event.inputs.friends_api_base_url != '' }}
-        uses: actions/upload-artifact@v6
+        uses: actions/upload-artifact@v7
         with:
           name: steward-v2-friends-${{ github.event.inputs.friends_version }}
           path: |

@@ -99,7 +99,7 @@ jobs:
           Get-Content -LiteralPath (Join-Path $steamPipe 'steampipe-rc-input.json')
 
       - name: Upload physical two-PC kit
-        uses: actions/upload-artifact@v6
+        uses: actions/upload-artifact@v7
         with:
           name: steward-steam-peer-two-pc-${{ inputs.version }}-${{ github.sha }}
           path: ${{ runner.temp }}/steward-steam-peer-two-pc-kit
@@ -107,7 +107,7 @@ jobs:
           retention-days: 14
 
       - name: Upload verified SteamPipe RC inputs
-        uses: actions/upload-artifact@v6
+        uses: actions/upload-artifact@v7
         with:
           name: steward-steampipe-rc-input-${{ inputs.version }}-${{ github.sha }}
           path: ${{ runner.temp }}/steward-steampipe-rc-input
