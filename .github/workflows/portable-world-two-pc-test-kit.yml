@@ -79,7 +79,7 @@ jobs:
           Get-Content -LiteralPath $manifestPath
 
       - name: Upload exact two-PC test kit
-        uses: actions/upload-artifact@v6
+        uses: actions/upload-artifact@v7
         with:
           name: safe-world-factorio-two-pc-test-kit-${{ github.sha }}
           path: ${{ runner.temp }}/safe-world-two-pc-test-kit
