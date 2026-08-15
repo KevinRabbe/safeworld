@@ -1,8 +1,5 @@
 <Project Sdk="Microsoft.NET.Sdk">
   <ItemGroup>
-    <Compile Remove="Remote/**/*.cs" />
-  </ItemGroup>
-  <ItemGroup>
     <ProjectReference Include="../SharedWorlds.Core/SharedWorlds.Core.csproj" />
   </ItemGroup>
 </Project>

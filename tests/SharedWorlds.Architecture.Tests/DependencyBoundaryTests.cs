@@ -117,6 +117,22 @@ public sealed class DependencyBoundaryTests
         Assert.DoesNotContain("_remoteIncompleteWorldIds", deletion);
     }
 
+    [Fact]
+    public void SafeWorldRepository_DoesNotContainLegacyBackendClientOrCompatibilityTests()
+    {
+        var repositoryRoot = FindRepositoryRoot();
+        var infrastructureRoot = Path.Combine(repositoryRoot, "src", "SharedWorlds.Infrastructure");
+        var infrastructureTestsRoot = Path.Combine(repositoryRoot, "tests", "SharedWorlds.Infrastructure.Tests");
+
+        Assert.False(Directory.Exists(Path.Combine(infrastructureRoot, "Remote")));
+        Assert.False(Directory.Exists(Path.Combine(repositoryRoot, "src", "SharedWorlds.LegacyRemote")));
+        Assert.False(Directory.Exists(Path.Combine(infrastructureTestsRoot, "Remote")));
+        Assert.False(Directory.Exists(Path.Combine(infrastructureTestsRoot, "BackendSimulation")));
+        Assert.Empty(Directory.EnumerateFiles(infrastructureTestsRoot, "Steward*.cs", SearchOption.TopDirectoryOnly));
+        Assert.Empty(Directory.EnumerateFiles(infrastructureTestsRoot, "OwnedWorldLocation*.cs", SearchOption.TopDirectoryOnly));
+        Assert.False(File.Exists(Path.Combine(infrastructureTestsRoot, "LocalOwnedWorldLocationPublicationJournalTests.cs")));
+    }
+
     private static void AssertReferencesOnly(string projectPath, params string[] allowedProjects)
     {
         var actual = ReadProjectReferences(projectPath);
