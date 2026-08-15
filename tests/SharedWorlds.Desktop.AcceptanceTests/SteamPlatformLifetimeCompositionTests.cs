@@ -29,27 +29,34 @@ public sealed class SteamPlatformLifetimeCompositionTests
     }
 
     [Fact]
-    public void TicketSourceReusesPlatformAndNeverOwnsSteamShutdown()
+    public void PeerRuntimeReusesAppOwnedSteamPlatformWithoutBackendAuthentication()
     {
-        var tickets = Read("src/SharedWorlds.Desktop/SteamWebApiTicketSource.cs");
-        var authentication = Read("src/SharedWorlds.Desktop/MainWindow.RemoteAuthentication.cs");
+        var peerRuntime = Read("src/SharedWorlds.Desktop/MainWindow.PeerRuntime.cs");
+        var peerComposition = Read("src/SharedWorlds.Desktop/StewardDesktopPeerRuntime.cs");
 
         Assert.Contains(
-            "public SteamWebApiTicketSource(SteamPlatformRuntime platform)",
-            tickets,
-            StringComparison.Ordinal);
-        Assert.Contains("_platform.LocalUser", tickets, StringComparison.Ordinal);
-        Assert.DoesNotContain("SteamAPI.Init", tickets, StringComparison.Ordinal);
-        Assert.DoesNotContain("SteamAPI.Shutdown", tickets, StringComparison.Ordinal);
-        Assert.DoesNotContain("SteamAPI.RunCallbacks", tickets, StringComparison.Ordinal);
-        Assert.Contains(
             "app.TryGetOrCreateSteamPlatformRuntime(",
-            authentication,
+            peerRuntime,
             StringComparison.Ordinal);
         Assert.Contains(
-            "new SteamWebApiTicketSource(steamPlatform!)",
-            authentication,
+            "StewardDesktopPeerRuntime.Create(",
+            peerRuntime,
             StringComparison.Ordinal);
+        Assert.Contains(
+            "SafeWorldDesktopSteamConfiguration.TryLoad(",
+            peerRuntime,
+            StringComparison.Ordinal);
+        Assert.Contains(
+            "Backend HTTP authentication is deliberately not an input",
+            peerRuntime,
+            StringComparison.Ordinal);
+        Assert.DoesNotContain("SteamAPI.Init", peerRuntime, StringComparison.Ordinal);
+        Assert.DoesNotContain("SteamAPI.Shutdown", peerRuntime, StringComparison.Ordinal);
+        Assert.DoesNotContain("SteamWebApiTicketSource", peerRuntime, StringComparison.Ordinal);
+        Assert.DoesNotContain("StewardRemoteSessionTokens", peerRuntime, StringComparison.Ordinal);
+
+        Assert.DoesNotContain("SteamAPI.Init", peerComposition, StringComparison.Ordinal);
+        Assert.DoesNotContain("SteamAPI.Shutdown", peerComposition, StringComparison.Ordinal);
     }
 
     private static string Read(string relativePath)
