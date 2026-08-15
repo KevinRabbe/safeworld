@@ -6,6 +6,7 @@ using System.Windows.Threading;
 using SharedWorlds.Core.Abstractions;
 using SharedWorlds.Core.Domain;
 using SharedWorlds.Core.Worlds;
+using SharedWorlds.Infrastructure.Sessions;
 using Steamworks;
 
 namespace SharedWorlds.Desktop;
