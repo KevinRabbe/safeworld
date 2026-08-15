@@ -5,24 +5,22 @@ namespace SharedWorlds.Desktop.AcceptanceTests;
 public sealed class OwnedPrivateWorldBringHereDesktopActionTests
 {
     [Fact]
-    public void StartupInitializesActionAfterCatalogHooks()
+    public void NormalPeerStartupDoesNotInitializeLegacyBringHereSurface()
     {
         var startup = Read("src/SharedWorlds.Desktop/MainWindow.UnifiedStartup.cs");
 
-        var catalogHooks = RequiredIndex(
+        Assert.DoesNotContain(
+            "InitializeOwnedPrivateWorldCatalogRefreshHooks();",
             startup,
-            "InitializeOwnedPrivateWorldCatalogRefreshHooks();");
-        var action = RequiredIndex(
-            startup,
+            StringComparison.Ordinal);
+        Assert.DoesNotContain(
             "InitializeOwnedPrivateWorldBringHereAction();",
-            catalogHooks);
-
-        Assert.True(catalogHooks < action);
-        Assert.Equal(
-            1,
-            CountOccurrences(
-                startup,
-                "InitializeOwnedPrivateWorldBringHereAction();"));
+            startup,
+            StringComparison.Ordinal);
+        Assert.DoesNotContain(
+            "InitializeStewardRemoteSessionAsync",
+            startup,
+            StringComparison.Ordinal);
     }
 
     [Fact]
