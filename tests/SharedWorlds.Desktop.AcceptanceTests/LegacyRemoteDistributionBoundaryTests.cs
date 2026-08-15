@@ -5,11 +5,19 @@ namespace SharedWorlds.Desktop.AcceptanceTests;
 public sealed class LegacyRemoteDistributionBoundaryTests
 {
     [Fact]
-    public void ProductInfrastructureExcludesLegacyRemoteSources()
+    public void ProductRepositoryDoesNotContainLegacyRemoteSources()
     {
-        var project = ReadRepositoryFile("src/SharedWorlds.Infrastructure/SharedWorlds.Infrastructure.csproj");
+        var repositoryRoot = FindRepositoryRoot();
 
-        Assert.Contains("<Compile Remove=\"Remote/**/*.cs\" />", project, StringComparison.Ordinal);
+        Assert.False(Directory.Exists(Path.Combine(
+            repositoryRoot,
+            "src",
+            "SharedWorlds.Infrastructure",
+            "Remote")));
+        Assert.False(Directory.Exists(Path.Combine(
+            repositoryRoot,
+            "src",
+            "SharedWorlds.LegacyRemote")));
     }
 
     [Fact]
