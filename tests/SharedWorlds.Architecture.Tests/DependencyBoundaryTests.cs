@@ -92,6 +92,31 @@ public sealed class DependencyBoundaryTests
         Assert.DoesNotContain("InitialWorldPublisher", sharing);
     }
 
+    [Fact]
+    public void PeerProductGameUi_HostsThroughLocalOrPeerLifecycleOnly()
+    {
+        var repositoryRoot = FindRepositoryRoot();
+        var games = File.ReadAllText(Path.Combine(repositoryRoot, "src", "SharedWorlds.Desktop", "MainWindow.UnifiedGames.cs"));
+        Assert.Contains("GetManagedHostAdapterForWorld(world, adapter)", games);
+        Assert.Contains("managedHostAdapter,", games);
+        Assert.DoesNotContain("_remoteRuntime", games);
+        Assert.DoesNotContain("_remoteWorldIds", games);
+        Assert.DoesNotContain("_lastRemoteWorldLoadError", games);
+        Assert.DoesNotContain("Shared Worlds are temporarily unavailable", games);
+    }
+
+    [Fact]
+    public void PeerProductDeletion_DoesNotDeletePersistentPeerAuthorityOrCallLegacyRuntime()
+    {
+        var repositoryRoot = FindRepositoryRoot();
+        var deletion = File.ReadAllText(Path.Combine(repositoryRoot, "src", "SharedWorlds.Desktop", "MainWindow.WorldDeletion.cs"));
+        Assert.Contains("world?.PeerAuthority is not null", deletion);
+        Assert.Contains("must be left through Manage access", deletion);
+        Assert.DoesNotContain("_remoteRuntime", deletion);
+        Assert.DoesNotContain("_remoteWorldIds", deletion);
+        Assert.DoesNotContain("_remoteIncompleteWorldIds", deletion);
+    }
+
     private static void AssertReferencesOnly(string projectPath, params string[] allowedProjects)
     {
         var actual = ReadProjectReferences(projectPath);
