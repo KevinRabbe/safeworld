@@ -60,6 +60,22 @@ public sealed class DependencyBoundaryTests
         }
     }
 
+    [Fact]
+    public void PeerProductStartup_DoesNotEnterLegacyBackendRuntime()
+    {
+        var repositoryRoot = FindRepositoryRoot();
+        var startupPath = Path.Combine(
+            repositoryRoot,
+            "src",
+            "SharedWorlds.Desktop",
+            "MainWindow.UnifiedStartup.cs");
+        var startup = File.ReadAllText(startupPath);
+
+        Assert.Contains("InitializeStewardPeerRuntime();", startup);
+        Assert.DoesNotContain("InitializeStewardRemoteSessionAsync(", startup);
+        Assert.DoesNotContain("_remoteRuntime", startup);
+    }
+
     private static void AssertReferencesOnly(
         string projectPath,
         params string[] allowedProjects)
