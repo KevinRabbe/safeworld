@@ -2,7 +2,6 @@ using System.Windows;
 using System.Windows.Automation;
 using System.Windows.Controls;
 using System.Windows.Threading;
-using SharedWorlds.Infrastructure.Remote;
 
 namespace SharedWorlds.Desktop;
 
@@ -19,7 +18,6 @@ public partial class MainWindow
     private DispatcherTimer? _globalLobbyTimer;
     private bool _globalLobbyVisible;
     private bool _globalLobbyRefreshInProgress;
-    private int _globalLobbyRefreshVersion;
 
     internal void InitializeProfessionalProductShell()
     {
@@ -292,17 +290,16 @@ public partial class MainWindow
         }
     }
 
-    private async Task RefreshGlobalLobbyAsync()
+    private Task RefreshGlobalLobbyAsync()
     {
         if (!_globalLobbyVisible ||
             _globalLobbyRefreshInProgress ||
             _globalLobbyRows is null ||
             _globalLobbyStatus is null)
         {
-            return;
+            return Task.CompletedTask;
         }
 
-        var refreshVersion = ++_globalLobbyRefreshVersion;
         _globalLobbyRefreshInProgress = true;
         _globalLobbyStatus.Text = "Refreshing…";
 
@@ -312,7 +309,7 @@ public partial class MainWindow
             rows.Children.Clear();
 
             var sharedWorlds = _allWorldItems
-                .Where(item => _remoteWorldIds.Contains(item.World.Id))
+                .Where(item => _peerWorldIds.Contains(item.World.Id))
                 .OrderBy(item => item.GameName, StringComparer.OrdinalIgnoreCase)
                 .ThenBy(item => item.Name, StringComparer.OrdinalIgnoreCase)
                 .ToList();
@@ -321,73 +318,19 @@ public partial class MainWindow
             {
                 AddGlobalLobbyEmptyState(rows, DesktopText.NoSharedWorlds);
                 _globalLobbyStatus.Text = string.Empty;
-                return;
+                return Task.CompletedTask;
             }
 
-            var runtime = _remoteRuntime;
-            if (runtime is null)
-            {
-                AddGlobalLobbyEmptyState(rows, "Reconnect Safe World to load your shared World lobbies.");
-                _globalLobbyStatus.Text = "Connection required.";
-                return;
-            }
-
-            IReadOnlyDictionary<(string Provider, string ExternalId), string> names =
-                new Dictionary<(string Provider, string ExternalId), string>();
-            if (string.Equals(runtime.User.Provider, "friends-build", StringComparison.Ordinal))
-            {
-                try
-                {
-                    names = (await runtime.Access.ListFriendsBuildIdentitiesAsync())
-                        .ToDictionary(
-                            static identity => (identity.Provider, identity.ExternalId),
-                            static identity => identity.DisplayName);
-                }
-                catch (Exception exception) when (IsRemoteAvailabilityFailure(exception))
-                {
-                    // Names are presentation-only. Individual World cards still remain useful with
-                    // provider identities if the optional Friends Build roster is temporarily unavailable.
-                }
-            }
-
-            var activeWorldCount = 0;
+            var peerRuntimeAvailable = _peerRuntime is not null;
             foreach (var item in sharedWorlds)
             {
-                if (refreshVersion != _globalLobbyRefreshVersion || !_globalLobbyVisible)
-                {
-                    return;
-                }
-
-                try
-                {
-                    var members = await runtime.Access.ListMembersAsync(item.World.Id);
-                    var metadata = await runtime.GetWorldMetadataAsync(item.World.Id);
-                    var snapshot = await runtime.PlayerPresence.GetSnapshotAsync(item.World.Id);
-                    var isActive = snapshot.Host is not null || snapshot.Players.Count > 0;
-                    if (isActive)
-                    {
-                        activeWorldCount++;
-                    }
-
-                    rows.Children.Add(CreateGlobalLobbyWorldCard(
-                        item,
-                        members,
-                        metadata,
-                        snapshot,
-                        names,
-                        runtime.User.Provider,
-                        runtime.User.ExternalId,
-                        runtime.User.DisplayName));
-                }
-                catch (Exception exception) when (IsRemoteAvailabilityFailure(exception))
-                {
-                    rows.Children.Add(CreateUnavailableLobbyWorldCard(item));
-                }
+                rows.Children.Add(CreateGlobalLobbyWorldCard(item, peerRuntimeAvailable));
             }
 
-            _globalLobbyStatus.Text = activeWorldCount == 0
-                ? $"{sharedWorlds.Count} shared Worlds"
-                : $"{sharedWorlds.Count} shared Worlds · {activeWorldCount} active now";
+            _globalLobbyStatus.Text = peerRuntimeAvailable
+                ? $"{sharedWorlds.Count} peer-shared Worlds"
+                : $"{sharedWorlds.Count} peer-shared Worlds · Steam peer runtime unavailable";
+            return Task.CompletedTask;
         }
         finally
         {
@@ -397,13 +340,7 @@ public partial class MainWindow
 
     private Border CreateGlobalLobbyWorldCard(
         UnifiedWorldListItem item,
-        IReadOnlyList<StewardRemoteWorldMember> members,
-        StewardRemoteWorldMetadata? metadata,
-        StewardRemoteWorldPlayerPresenceSnapshot snapshot,
-        IReadOnlyDictionary<(string Provider, string ExternalId), string> names,
-        string currentProvider,
-        string currentExternalId,
-        string? currentDisplayName)
+        bool peerRuntimeAvailable)
     {
         var card = CreateLobbyCardShell();
         var root = new StackPanel();
@@ -420,6 +357,7 @@ public partial class MainWindow
             Height = 38,
             Margin = new Thickness(16, 0, 0, 0),
             Tag = item,
+            IsEnabled = peerRuntimeAvailable,
             VerticalAlignment = VerticalAlignment.Top
         };
         openButton.Click += GlobalLobbyOpenWorldButton_Click;
@@ -445,87 +383,18 @@ public partial class MainWindow
         header.Children.Add(title);
         root.Children.Add(header);
 
-        root.Children.Add(CreateLobbySectionHeading(DesktopText.PlayingNow));
-        var playingNames = BuildPlayingNames(
-            snapshot,
-            names,
-            currentProvider,
-            currentExternalId,
-            currentDisplayName);
-        root.Children.Add(CreateLobbyValueText(
-            playingNames.Count == 0
-                ? "No one is playing right now."
-                : string.Join("  ·  ", playingNames),
-            muted: playingNames.Count == 0));
-
-        root.Children.Add(CreateLobbySectionHeading(DesktopText.WorldGroup));
-        var accessManager = metadata?.AccessManager;
-        var memberNames = members
-            .OrderByDescending(member => accessManager is not null && IsGlobalLobbySameIdentity(
-                member.Identity.Provider,
-                member.Identity.ExternalId,
-                accessManager.Provider,
-                accessManager.ExternalId))
-            .ThenBy(member => ResolveGlobalLobbyName(
-                member.Identity.Provider,
-                member.Identity.ExternalId,
-                names,
-                currentProvider,
-                currentExternalId,
-                currentDisplayName), StringComparer.OrdinalIgnoreCase)
-            .Select(member =>
-            {
-                var displayName = ResolveGlobalLobbyName(
-                    member.Identity.Provider,
-                    member.Identity.ExternalId,
-                    names,
-                    currentProvider,
-                    currentExternalId,
-                    currentDisplayName);
-                var suffix = accessManager is not null && IsGlobalLobbySameIdentity(
-                    member.Identity.Provider,
-                    member.Identity.ExternalId,
-                    accessManager.Provider,
-                    accessManager.ExternalId)
-                    ? DesktopText.AccessManagerSuffix
-                    : string.Empty;
-                if (member.Status == RemoteWorldMemberStatus.RevocationPending)
-                {
-                    suffix += DesktopText.AccessRemovalPendingSuffix;
-                }
-
-                return displayName + suffix;
-            })
-            .ToList();
-        root.Children.Add(CreateLobbyValueText(
-            memberNames.Count == 0
-                ? "No World members found."
-                : string.Join("  ·  ", memberNames),
-            muted: memberNames.Count == 0));
-
-        return card;
-    }
-
-    private Border CreateUnavailableLobbyWorldCard(UnifiedWorldListItem item)
-    {
-        var card = CreateLobbyCardShell();
-        var root = new StackPanel();
-        card.Child = root;
-
-        root.Children.Add(new TextBlock
+        var status = new TextBlock
         {
-            Text = item.Name,
-            FontSize = 18,
-            FontWeight = FontWeights.SemiBold
-        });
-        var subtitle = new TextBlock
-        {
-            Text = $"{item.GameName} · Lobby temporarily unavailable",
-            Margin = new Thickness(0, 4, 0, 0),
-            FontSize = 12
+            Text = peerRuntimeAvailable
+                ? "Peer shared · open the World for live lobby and member status."
+                : "Peer shared · Steam peer runtime is unavailable on this launch.",
+            Margin = new Thickness(0, 12, 0, 0),
+            FontSize = 13,
+            TextWrapping = TextWrapping.Wrap
         };
-        subtitle.SetResourceReference(TextBlock.ForegroundProperty, "MutedTextBrush");
-        root.Children.Add(subtitle);
+        status.SetResourceReference(TextBlock.ForegroundProperty, "MutedTextBrush");
+        root.Children.Add(status);
+
         return card;
     }
 
@@ -542,120 +411,6 @@ public partial class MainWindow
         card.SetResourceReference(Border.BorderBrushProperty, "BorderBrush");
         return card;
     }
-
-    private static TextBlock CreateLobbySectionHeading(string text)
-        => new()
-        {
-            Text = text,
-            Margin = new Thickness(0, 16, 0, 5),
-            FontSize = 12,
-            FontWeight = FontWeights.SemiBold
-        };
-
-    private TextBlock CreateLobbyValueText(string text, bool muted)
-    {
-        var value = new TextBlock
-        {
-            Text = text,
-            FontSize = 13,
-            TextWrapping = TextWrapping.Wrap
-        };
-        if (muted)
-        {
-            value.SetResourceReference(TextBlock.ForegroundProperty, "MutedTextBrush");
-        }
-
-        return value;
-    }
-
-    private static List<string> BuildPlayingNames(
-        StewardRemoteWorldPlayerPresenceSnapshot snapshot,
-        IReadOnlyDictionary<(string Provider, string ExternalId), string> names,
-        string currentProvider,
-        string currentExternalId,
-        string? currentDisplayName)
-    {
-        var host = snapshot.Host;
-        var playing = snapshot.Players
-            .Select(player => new
-            {
-                player.Provider,
-                player.ExternalId,
-                Name = ResolveGlobalLobbyName(
-                    player.Provider,
-                    player.ExternalId,
-                    names,
-                    currentProvider,
-                    currentExternalId,
-                    currentDisplayName),
-                IsHost = host is not null && IsGlobalLobbySameIdentity(
-                    player.Provider,
-                    player.ExternalId,
-                    host.Provider,
-                    host.ExternalId)
-            })
-            .ToList();
-
-        if (host is not null && playing.All(player => !IsGlobalLobbySameIdentity(
-                player.Provider,
-                player.ExternalId,
-                host.Provider,
-                host.ExternalId)))
-        {
-            playing.Add(new
-            {
-                host.Provider,
-                host.ExternalId,
-                Name = ResolveGlobalLobbyName(
-                    host.Provider,
-                    host.ExternalId,
-                    names,
-                    currentProvider,
-                    currentExternalId,
-                    currentDisplayName),
-                IsHost = true
-            });
-        }
-
-        return playing
-            .OrderByDescending(static player => player.IsHost)
-            .ThenBy(static player => player.Name, StringComparer.OrdinalIgnoreCase)
-            .Select(player => player.Name + (player.IsHost
-                ? host?.State == StewardRemoteHostPresenceState.Starting
-                    ? DesktopText.HostStartingSuffix
-                    : DesktopText.HostSuffix
-                : string.Empty))
-            .ToList();
-    }
-
-    private static string ResolveGlobalLobbyName(
-        string provider,
-        string externalId,
-        IReadOnlyDictionary<(string Provider, string ExternalId), string> names,
-        string currentProvider,
-        string currentExternalId,
-        string? currentDisplayName)
-    {
-        if (string.Equals(provider, currentProvider, StringComparison.Ordinal) &&
-            string.Equals(externalId, currentExternalId, StringComparison.Ordinal) &&
-            !string.IsNullOrWhiteSpace(currentDisplayName))
-        {
-            return currentDisplayName;
-        }
-
-        return names.TryGetValue((provider, externalId), out var displayName) &&
-               !string.IsNullOrWhiteSpace(displayName)
-            ? displayName
-            : externalId;
-    }
-
-    private static bool IsGlobalLobbySameIdentity(
-        string leftProvider,
-        string leftExternalId,
-        string rightProvider,
-        string rightExternalId)
-        => string.Equals(leftProvider, rightProvider, StringComparison.Ordinal) &&
-           string.Equals(leftExternalId, rightExternalId, StringComparison.Ordinal);
 
     private void AddGlobalLobbyEmptyState(Panel panel, string text)
     {
