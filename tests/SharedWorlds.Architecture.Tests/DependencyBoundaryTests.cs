@@ -74,6 +74,10 @@ public sealed class DependencyBoundaryTests
         Assert.Contains("InitializeStewardPeerRuntime();", startup);
         Assert.DoesNotContain("InitializeStewardRemoteSessionAsync(", startup);
         Assert.DoesNotContain("_remoteRuntime", startup);
+        Assert.DoesNotContain("InitializeOwnedPrivateWorldCatalog", startup);
+        Assert.DoesNotContain("InitializeOwnedPrivateWorldBringHere", startup);
+        Assert.DoesNotContain("InitializeWorldInvitationsUiAsync", startup);
+        Assert.DoesNotContain("RehomeInvitationsToGlobalLobby", startup);
     }
 
     private static void AssertReferencesOnly(

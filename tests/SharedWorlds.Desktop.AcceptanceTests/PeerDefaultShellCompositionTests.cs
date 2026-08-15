@@ -5,58 +5,37 @@ namespace SharedWorlds.Desktop.AcceptanceTests;
 public sealed class PeerDefaultShellCompositionTests
 {
     [Fact]
-    public void PeerJoinInviteHandlingIsInitializedRegardlessOfLegacyRemoteRuntime()
+    public void PeerJoinInviteHandlingIsInitializedDirectlyFromPeerStartup()
     {
         var source = ReadStartup();
-        var remoteSession = RequiredIndex(source, "await InitializeStewardRemoteSessionAsync();");
-        var joinUi = RequiredIndex(source, "await InitializeWorldJoinUiAsync();", remoteSession);
+        var peerRuntime = RequiredIndex(source, "InitializeStewardPeerRuntime();");
+        var joinUi = RequiredIndex(source, "await InitializeWorldJoinUiAsync();", peerRuntime);
         var coldJoin = RequiredIndex(source, "InitializeSteamLobbyLaunchRequest();", joinUi);
-        var legacyGuard = RequiredIndex(source, "if (_remoteRuntime is not null)", coldJoin);
 
-        Assert.True(remoteSession < joinUi);
+        Assert.True(peerRuntime < joinUi);
         Assert.True(joinUi < coldJoin);
-        Assert.True(coldJoin < legacyGuard);
+        Assert.DoesNotContain("InitializeStewardRemoteSessionAsync", source, StringComparison.Ordinal);
+        Assert.DoesNotContain("_remoteRuntime", source, StringComparison.Ordinal);
     }
 
     [Fact]
-    public void LegacyInvitationInboxIsCreatedOnlyForEstablishedRemoteMigrationRuntime()
+    public void NormalPeerShellDoesNotInitializeLegacyBackendInvitationInbox()
     {
         var source = ReadStartup();
-        var comment = RequiredIndex(source, "legacy backend invitation inbox belongs only to an actually-established migration runtime");
-        var guard = RequiredIndex(source, "if (_remoteRuntime is not null)", comment);
-        var initialize = RequiredIndex(source, "await InitializeWorldInvitationsUiAsync();", guard);
-        var guardEnd = RequiredIndex(source, "}\n\n        InitializeProfessionalProductShell();", initialize);
 
-        Assert.True(comment < guard);
-        Assert.True(guard < initialize);
-        Assert.True(initialize < guardEnd);
+        Assert.DoesNotContain("InitializeWorldInvitationsUiAsync", source, StringComparison.Ordinal);
+        Assert.DoesNotContain("RehomeInvitationsToGlobalLobby", source, StringComparison.Ordinal);
     }
 
     [Fact]
-    public void LegacyInvitationRehomeIsAlsoRemoteRuntimeOnly()
+    public void ProfessionalShellAndVisualDesignDoNotDependOnLegacyRuntimeDecision()
     {
         var source = ReadStartup();
         var shell = RequiredIndex(source, "InitializeProfessionalProductShell();");
-        var guard = RequiredIndex(source, "if (_remoteRuntime is not null)", shell);
-        var rehome = RequiredIndex(source, "RehomeInvitationsToGlobalLobby();", guard);
-        var visual = RequiredIndex(source, "InitializeVisualDesignV2();", rehome);
+        var visual = RequiredIndex(source, "InitializeVisualDesignV2();", shell);
 
-        Assert.True(shell < guard);
-        Assert.True(guard < rehome);
-        Assert.True(rehome < visual);
-    }
-
-    [Fact]
-    public void NormalPeerShellCannotInitializeLegacyInboxBeforeRemoteSessionDecision()
-    {
-        var source = ReadStartup();
-        var remoteSession = RequiredIndex(source, "await InitializeStewardRemoteSessionAsync();");
-        var invitationInit = RequiredIndex(source, "await InitializeWorldInvitationsUiAsync();");
-
-        Assert.True(remoteSession < invitationInit);
-        var preRemote = source[..remoteSession];
-        Assert.DoesNotContain("InitializeWorldInvitationsUiAsync", preRemote, StringComparison.Ordinal);
-        Assert.DoesNotContain("RehomeInvitationsToGlobalLobby", preRemote, StringComparison.Ordinal);
+        Assert.True(shell < visual);
+        Assert.DoesNotContain("_remoteRuntime", source[shell..visual], StringComparison.Ordinal);
     }
 
     private static string ReadStartup()

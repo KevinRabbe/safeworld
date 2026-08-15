@@ -5,23 +5,15 @@ namespace SharedWorlds.Desktop.AcceptanceTests;
 public sealed class PeerDefaultShellLegacyCatalogCompositionTests
 {
     [Fact]
-    public void OwnedPrivateCatalogPresentationHooksAndBringHereInitializeOnlyAfterRemoteSessionDecision()
+    public void NormalPeerStartupDoesNotInitializeLegacyOwnedPrivateCatalogOrBringHere()
     {
         var source = ReadStartup();
-        var remoteSession = RequiredIndex(source, "await InitializeStewardRemoteSessionAsync();");
-        var legacyComment = RequiredIndex(source, "Owned-private catalog and Bring Here are legacy backend reservation/location workflows.", remoteSession);
-        var guard = RequiredIndex(source, "if (_remoteRuntime is not null)", legacyComment);
-        var catalogUi = RequiredIndex(source, "InitializeOwnedPrivateWorldCatalogUi();", guard);
-        var catalogHooks = RequiredIndex(source, "InitializeOwnedPrivateWorldCatalogRefreshHooks();", catalogUi);
-        var bringHere = RequiredIndex(source, "InitializeOwnedPrivateWorldBringHereAction();", catalogHooks);
-        var guardEnd = RequiredIndex(source, "}\n\n        UpdateWorldSharingActionState();", bringHere);
 
-        Assert.True(remoteSession < legacyComment);
-        Assert.True(legacyComment < guard);
-        Assert.True(guard < catalogUi);
-        Assert.True(catalogUi < catalogHooks);
-        Assert.True(catalogHooks < bringHere);
-        Assert.True(bringHere < guardEnd);
+        Assert.DoesNotContain("InitializeOwnedPrivateWorldCatalogUi", source, StringComparison.Ordinal);
+        Assert.DoesNotContain("InitializeOwnedPrivateWorldCatalogRefreshHooks", source, StringComparison.Ordinal);
+        Assert.DoesNotContain("InitializeOwnedPrivateWorldBringHereAction", source, StringComparison.Ordinal);
+        Assert.DoesNotContain("InitializeStewardRemoteSessionAsync", source, StringComparison.Ordinal);
+        Assert.DoesNotContain("_remoteRuntime", source, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -33,46 +25,32 @@ public sealed class PeerDefaultShellLegacyCatalogCompositionTests
         var body = source[constructor..constructorEnd];
 
         Assert.DoesNotContain("InitializeOwnedPrivateWorldCatalogUi", body, StringComparison.Ordinal);
+        Assert.DoesNotContain("InitializeOwnedPrivateWorldBringHereAction", body, StringComparison.Ordinal);
     }
 
     [Fact]
-    public void PeerDefaultStartupCannotConstructOrRegisterLegacyOwnedLocationSurfaceBeforeRemoteRuntimeExists()
-    {
-        var source = ReadStartup();
-        var remoteSession = RequiredIndex(source, "await InitializeStewardRemoteSessionAsync();");
-        var preRemote = source[..remoteSession];
-
-        Assert.DoesNotContain("InitializeOwnedPrivateWorldCatalogUi", preRemote, StringComparison.Ordinal);
-        Assert.DoesNotContain("InitializeOwnedPrivateWorldCatalogRefreshHooks", preRemote, StringComparison.Ordinal);
-        Assert.DoesNotContain("InitializeOwnedPrivateWorldBringHereAction", preRemote, StringComparison.Ordinal);
-    }
-
-    [Fact]
-    public void PeerRuntimeAndCoreWorldUiRemainIndependentOfLegacyCatalogGuard()
+    public void PeerRuntimeAndCoreWorldUiComposeWithoutLegacyCatalogDecision()
     {
         var source = ReadStartup();
         var peerRuntime = RequiredIndex(source, "InitializeStewardPeerRuntime();");
         var gameUi = RequiredIndex(source, "await InitializeUnifiedGameUiAsync();", peerRuntime);
         var sharing = RequiredIndex(source, "InitializeWorldSharingUi();", gameUi);
-        var remoteSession = RequiredIndex(source, "await InitializeStewardRemoteSessionAsync();", sharing);
-        var join = RequiredIndex(source, "await InitializeWorldJoinUiAsync();", remoteSession);
+        var join = RequiredIndex(source, "await InitializeWorldJoinUiAsync();", sharing);
 
         Assert.True(peerRuntime < gameUi);
         Assert.True(gameUi < sharing);
-        Assert.True(sharing < remoteSession);
-        Assert.True(remoteSession < join);
+        Assert.True(sharing < join);
     }
 
     [Fact]
-    public void LegacyCatalogGuardDoesNotGateSteamInviteJoinPath()
+    public void SteamInviteJoinPathDoesNotDependOnLegacyCatalogSurface()
     {
         var source = ReadStartup();
-        var bringHere = RequiredIndex(source, "InitializeOwnedPrivateWorldBringHereAction();");
-        var join = RequiredIndex(source, "await InitializeWorldJoinUiAsync();", bringHere);
+        var join = RequiredIndex(source, "await InitializeWorldJoinUiAsync();");
         var coldJoin = RequiredIndex(source, "InitializeSteamLobbyLaunchRequest();", join);
 
-        Assert.True(bringHere < join);
         Assert.True(join < coldJoin);
+        Assert.DoesNotContain("InitializeOwnedPrivateWorldBringHereAction", source, StringComparison.Ordinal);
     }
 
     private static string ReadStartup()

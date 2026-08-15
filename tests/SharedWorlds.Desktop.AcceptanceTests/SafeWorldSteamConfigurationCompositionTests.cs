@@ -26,14 +26,6 @@ public sealed class SafeWorldSteamConfigurationCompositionTests
             "private const string LegacySteamAppIdVariable = \"STEWARD_STEAM_APP_ID\"",
             source,
             StringComparison.Ordinal);
-        Assert.DoesNotContain(
-            "StewardDesktopSteamConfiguration.PackageConfigurationFileName",
-            source,
-            StringComparison.Ordinal);
-        Assert.DoesNotContain(
-            "StewardDesktopSteamConfiguration.SteamAppIdVariable",
-            source,
-            StringComparison.Ordinal);
     }
 
     [Fact]
@@ -47,30 +39,32 @@ public sealed class SafeWorldSteamConfigurationCompositionTests
             "Configure exactly one SafeWorld or legacy AppID source",
             source,
             StringComparison.Ordinal);
-        Assert.Contains("File.Exists(canonicalPath)", source, StringComparison.Ordinal);
-        Assert.Contains("File.Exists(legacyPath)", source, StringComparison.Ordinal);
+        Assert.Contains("canonicalPackageConfigured", source, StringComparison.Ordinal);
+        Assert.Contains("legacyPackageConfigured", source, StringComparison.Ordinal);
     }
 
     [Fact]
-    public void StartupCompatibilityBridgeFeedsOnlyTheQualifiedInternalAppIdInput()
+    public void CanonicalSafeWorldPackageIsParsedBySafeWorldBoundaryDirectly()
     {
         var source = ReadRepositoryFile(
-            "src/SharedWorlds.Desktop/SafeWorldSteamCompatibilityBootstrap.cs");
+            "src/SharedWorlds.Desktop/SafeWorldDesktopSteamConfiguration.cs");
 
-        Assert.Contains("[ModuleInitializer]", source, StringComparison.Ordinal);
-        Assert.Contains(
-            "SafeWorldDesktopSteamConfiguration.TryLoad",
-            source,
-            StringComparison.Ordinal);
-        Assert.Contains(
-            "private const string LegacySteamAppIdVariable = \"STEWARD_STEAM_APP_ID\"",
-            source,
-            StringComparison.Ordinal);
-        Assert.Contains("InvalidConfiguration", source, StringComparison.Ordinal);
-        Assert.DoesNotContain(
-            "StewardDesktopSteamConfiguration.SteamAppIdVariable",
-            source,
-            StringComparison.Ordinal);
+        Assert.Contains("TryLoadCanonicalPackage(", source, StringComparison.Ordinal);
+        Assert.Contains("$\"{PackageConfigurationFileName} must contain one JSON object.\"", source, StringComparison.Ordinal);
+        Assert.Contains("$\"{SteamAppIdVariable} must be a positive Steam AppID.\"", source, StringComparison.Ordinal);
+        Assert.Contains("if (legacyPackageConfigured || legacyEnvironmentConfigured)", source, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void PeerRuntimeConsumesSafeWorldConfigurationWithoutCompatibilityBootstrap()
+    {
+        var source = ReadRepositoryFile(
+            "src/SharedWorlds.Desktop/MainWindow.PeerRuntime.cs");
+
+        Assert.Contains("SafeWorldDesktopSteamConfiguration.TryLoad(", source, StringComparison.Ordinal);
+        Assert.DoesNotContain("StewardDesktopSteamConfiguration.TryLoad(", source, StringComparison.Ordinal);
+        Assert.False(File.Exists(FindRepositoryFile(
+            "src/SharedWorlds.Desktop/SafeWorldSteamCompatibilityBootstrap.cs")));
     }
 
     [Fact]
@@ -101,11 +95,7 @@ public sealed class SafeWorldSteamConfigurationCompositionTests
         var workspace = Environment.GetEnvironmentVariable("GITHUB_WORKSPACE");
         if (!string.IsNullOrWhiteSpace(workspace))
         {
-            var candidate = Path.Combine(workspace, relativePath);
-            if (File.Exists(candidate))
-            {
-                return candidate;
-            }
+            return Path.Combine(workspace, relativePath);
         }
 
         for (var directory = new DirectoryInfo(AppContext.BaseDirectory);
@@ -113,12 +103,12 @@ public sealed class SafeWorldSteamConfigurationCompositionTests
              directory = directory.Parent)
         {
             var candidate = Path.Combine(directory.FullName, relativePath);
-            if (File.Exists(candidate))
+            if (File.Exists(candidate) || Directory.Exists(Path.GetDirectoryName(candidate)))
             {
                 return candidate;
             }
         }
 
-        throw new FileNotFoundException($"Could not locate repository file '{relativePath}'.");
+        throw new FileNotFoundException($"Could not locate repository path '{relativePath}'.");
     }
 }

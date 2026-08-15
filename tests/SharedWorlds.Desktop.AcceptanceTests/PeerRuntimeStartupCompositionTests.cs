@@ -5,26 +5,29 @@ namespace SharedWorlds.Desktop.AcceptanceTests;
 public sealed class PeerRuntimeStartupCompositionTests
 {
     [Fact]
-    public void PeerRuntimeStartsAfterDurableDeviceIdentityAndBeforeRemoteSession()
+    public void PeerRuntimeStartsAfterDurableDeviceIdentityWithoutRemoteSession()
     {
         var source = Read("src/SharedWorlds.Desktop/MainWindow.UnifiedStartup.cs");
         var deviceSettings = RequiredIndex(source, "await LoadDeviceSettingsAsync();");
         var peerRuntime = RequiredIndex(source, "InitializeStewardPeerRuntime();", deviceSettings);
-        var remoteSession = RequiredIndex(source, "await InitializeStewardRemoteSessionAsync();", peerRuntime);
+        var gameUi = RequiredIndex(source, "await InitializeUnifiedGameUiAsync();", peerRuntime);
 
         Assert.True(deviceSettings < peerRuntime);
-        Assert.True(peerRuntime < remoteSession);
+        Assert.True(peerRuntime < gameUi);
+        Assert.DoesNotContain("InitializeStewardRemoteSessionAsync", source, StringComparison.Ordinal);
+        Assert.DoesNotContain("_remoteRuntime", source, StringComparison.Ordinal);
     }
 
     [Fact]
-    public void PeerStartupLoadsIndependentSteamConfigurationAndOneAppOwnedRuntime()
+    public void PeerStartupLoadsSafeWorldSteamConfigurationAndOneAppOwnedRuntime()
     {
         var source = Read("src/SharedWorlds.Desktop/MainWindow.PeerRuntime.cs");
 
-        Assert.Contains("StewardDesktopSteamConfiguration.TryLoad(", source, StringComparison.Ordinal);
+        Assert.Contains("SafeWorldDesktopSteamConfiguration.TryLoad(", source, StringComparison.Ordinal);
         Assert.Contains("app.TryGetOrCreateSteamPlatformRuntime(", source, StringComparison.Ordinal);
         Assert.Contains("configuration!.AppId", source, StringComparison.Ordinal);
         Assert.Contains("StewardDesktopPeerRuntime.Create(", source, StringComparison.Ordinal);
+        Assert.DoesNotContain("StewardDesktopSteamConfiguration.TryLoad(", source, StringComparison.Ordinal);
         Assert.DoesNotContain("StewardDesktopRemoteConfiguration", source, StringComparison.Ordinal);
         Assert.DoesNotContain("InitializeStewardRemoteSessionAsync", source, StringComparison.Ordinal);
         Assert.DoesNotContain("HttpClient", source, StringComparison.Ordinal);
@@ -75,7 +78,7 @@ public sealed class PeerRuntimeStartupCompositionTests
     public void MissingPeerConfigurationDoesNotPreventLocalStartup()
     {
         var source = Read("src/SharedWorlds.Desktop/MainWindow.PeerRuntime.cs");
-        var configurationLoad = RequiredIndex(source, "if (!StewardDesktopSteamConfiguration.TryLoad(");
+        var configurationLoad = RequiredIndex(source, "if (!SafeWorldDesktopSteamConfiguration.TryLoad(");
         var firstReturn = RequiredIndex(source, "return;", configurationLoad);
         var peerCreation = RequiredIndex(source, "_peerRuntime = StewardDesktopPeerRuntime.Create(", firstReturn);
 
