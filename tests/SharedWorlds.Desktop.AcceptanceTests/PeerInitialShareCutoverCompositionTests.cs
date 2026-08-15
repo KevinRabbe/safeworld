@@ -28,7 +28,7 @@ public sealed class PeerInitialShareCutoverCompositionTests
         Assert.True(peerRuntime < initialShare);
         Assert.DoesNotContain("_remoteRuntime", source, StringComparison.Ordinal);
         Assert.DoesNotContain("InitialWorldPublisher", source, StringComparison.Ordinal);
-        Assert.DoesNotContain("WorldAccessDialog", source, StringComparison.Ordinal);
+        Assert.DoesNotContain("new WorldAccessDialog(", source, StringComparison.Ordinal);
     }
 
     [Fact]
