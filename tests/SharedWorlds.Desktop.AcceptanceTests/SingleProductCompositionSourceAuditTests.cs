@@ -38,6 +38,38 @@ public sealed class SingleProductCompositionSourceAuditTests
         Assert.Contains("SharedWorlds.Cli.Retired", project, StringComparison.Ordinal);
     }
 
+    [Fact]
+    public void ProductInfrastructureExcludesLegacyRemoteSourcesAndDesktopCannotReferenceLegacyAssembly()
+    {
+        var repositoryRoot = FindRepositoryRoot();
+        var infrastructureProject = File.ReadAllText(Path.Combine(
+            repositoryRoot,
+            "src",
+            "SharedWorlds.Infrastructure",
+            "SharedWorlds.Infrastructure.csproj"));
+        var legacyProjectPath = Path.Combine(
+            repositoryRoot,
+            "src",
+            "SharedWorlds.LegacyRemote",
+            "SharedWorlds.LegacyRemote.csproj");
+        var desktopProject = File.ReadAllText(Path.Combine(
+            repositoryRoot,
+            "src",
+            "SharedWorlds.Desktop",
+            "SharedWorlds.Desktop.csproj"));
+
+        Assert.Contains("<Compile Remove=\"Remote/**/*.cs\" />", infrastructureProject, StringComparison.Ordinal);
+        Assert.True(File.Exists(legacyProjectPath), "Historical Remote sources must have an explicit non-product assembly owner.");
+
+        var legacyProject = File.ReadAllText(legacyProjectPath);
+        Assert.Contains("SharedWorlds.LegacyRemote", legacyProject, StringComparison.Ordinal);
+        Assert.Contains("../SharedWorlds.Infrastructure/Remote/**/*.cs", legacyProject, StringComparison.Ordinal);
+        Assert.Contains("../SharedWorlds.Infrastructure/SharedWorlds.Infrastructure.csproj", legacyProject, StringComparison.Ordinal);
+
+        Assert.DoesNotContain("SharedWorlds.LegacyRemote", desktopProject, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain("SharedWorlds.Infrastructure/Remote", desktopProject, StringComparison.OrdinalIgnoreCase);
+    }
+
     private static string FindRepositoryRoot()
     {
         var current = new DirectoryInfo(AppContext.BaseDirectory);
