@@ -169,6 +169,20 @@ public sealed class DependencyBoundaryTests
             "legacy-backend-ci.yml")));
     }
 
+    [Fact]
+    public void SafeWorldRepository_DoesNotContainRetiredCliOrBackendPackaging()
+    {
+        var repositoryRoot = FindRepositoryRoot();
+
+        Assert.False(Directory.Exists(Path.Combine(repositoryRoot, "src", "SharedWorlds.Cli")));
+        Assert.False(Directory.Exists(Path.Combine(repositoryRoot, "beta", "server")));
+
+        var packages = File.ReadAllText(Path.Combine(repositoryRoot, "Directory.Packages.props"));
+        Assert.DoesNotContain("AWSSDK.S3", packages, StringComparison.Ordinal);
+        Assert.DoesNotContain("Microsoft.AspNetCore.TestHost", packages, StringComparison.Ordinal);
+        Assert.DoesNotContain("Npgsql", packages, StringComparison.Ordinal);
+    }
+
     private static void AssertReferencesOnly(string projectPath, params string[] allowedProjects)
     {
         var actual = ReadProjectReferences(projectPath);

@@ -1,7 +1,0 @@
-<Project Sdk="Microsoft.NET.Sdk">
-  <PropertyGroup>
-    <AssemblyName>SharedWorlds.Cli.Retired</AssemblyName>
-    <RootNamespace>SharedWorlds.Cli</RootNamespace>
-    <Description>Retired solution placeholder. SafeWorld has one supported product lifecycle and storage composition surface in Desktop.</Description>
-  </PropertyGroup>
-</Project>
