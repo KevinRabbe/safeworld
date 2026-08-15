@@ -14,15 +14,19 @@ public sealed class PeerDefaultShellLegacyCatalogCompositionTests
         "src/SharedWorlds.Desktop/WorldAccessDialog.cs",
         "src/SharedWorlds.Desktop/MainWindow.WorldInvitations.cs",
         "src/SharedWorlds.Desktop/MainWindow.LobbyInvitationsPresentation.cs",
-        "src/SharedWorlds.Desktop/PendingInvitationsDialog.cs"
+        "src/SharedWorlds.Desktop/PendingInvitationsDialog.cs",
+        "src/SharedWorlds.Desktop/CoordinatedJoinGameAdapter.cs",
+        "src/SharedWorlds.Desktop/CoordinatedWorldJoinService.cs"
     ];
 
     private static readonly string[] RetiredLiveBackendSymbols =
     [
+        "SharedWorlds.Infrastructure.Remote",
         "_remoteRuntime",
         "_remoteWorldIds",
         "StewardRemoteHostPresence",
-        "StewardDesktopRemoteRuntime"
+        "StewardDesktopRemoteRuntime",
+        "StewardWorldPlayerPresenceClient"
     ];
 
     [Fact]
