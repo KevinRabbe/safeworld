@@ -11,7 +11,18 @@ public sealed class PeerDefaultShellLegacyCatalogCompositionTests
         "src/SharedWorlds.Desktop/MainWindow.OwnedWorldLocationPublication.cs",
         "src/SharedWorlds.Desktop/MainWindow.RemoteRuntime.cs",
         "src/SharedWorlds.Desktop/StewardDesktopRemoteRuntime.cs",
-        "src/SharedWorlds.Desktop/WorldAccessDialog.cs"
+        "src/SharedWorlds.Desktop/WorldAccessDialog.cs",
+        "src/SharedWorlds.Desktop/MainWindow.WorldInvitations.cs",
+        "src/SharedWorlds.Desktop/MainWindow.LobbyInvitationsPresentation.cs",
+        "src/SharedWorlds.Desktop/PendingInvitationsDialog.cs"
+    ];
+
+    private static readonly string[] RetiredLiveBackendSymbols =
+    [
+        "_remoteRuntime",
+        "_remoteWorldIds",
+        "StewardRemoteHostPresence",
+        "StewardDesktopRemoteRuntime"
     ];
 
     [Fact]
@@ -24,6 +35,22 @@ public sealed class PeerDefaultShellLegacyCatalogCompositionTests
             Assert.False(
                 File.Exists(Path.Combine(root, relativePath)),
                 $"Retired Desktop backend source '{relativePath}' must not re-enter the SafeWorld product assembly.");
+        }
+    }
+
+    [Fact]
+    public void DesktopSourceTreeContainsNoLiveBackendAuthoritySymbols()
+    {
+        var root = FindRepositoryRoot();
+        var desktopRoot = Path.Combine(root, "src", "SharedWorlds.Desktop");
+
+        foreach (var file in Directory.EnumerateFiles(desktopRoot, "*.cs", SearchOption.AllDirectories))
+        {
+            var source = File.ReadAllText(file);
+            foreach (var retiredSymbol in RetiredLiveBackendSymbols)
+            {
+                Assert.DoesNotContain(retiredSymbol, source, StringComparison.Ordinal);
+            }
         }
     }
 
