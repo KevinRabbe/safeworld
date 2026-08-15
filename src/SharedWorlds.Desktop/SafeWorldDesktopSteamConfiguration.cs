@@ -5,15 +5,12 @@ using System.Text.Json;
 namespace SharedWorlds.Desktop;
 
 /// <summary>
-/// SafeWorld release-facing Steam configuration boundary. Canonical SafeWorld inputs are parsed here
-/// directly. Older engineering inputs remain readable only as an explicit compatibility fallback.
+/// SafeWorld release-facing Steam configuration boundary. Only canonical SafeWorld inputs are accepted.
 /// </summary>
 internal sealed record SafeWorldDesktopSteamConfiguration(uint AppId)
 {
     internal const string PackageConfigurationFileName = "safeworld-steam.json";
     internal const string SteamAppIdVariable = "SAFEWORLD_STEAM_APP_ID";
-    private const string LegacyPackageConfigurationFileName = "steward-steam.json";
-    private const string LegacySteamAppIdVariable = "STEWARD_STEAM_APP_ID";
     private const int SchemaVersion = 1;
     private const int MaximumConfigurationBytes = 1024;
 
@@ -23,37 +20,24 @@ internal sealed record SafeWorldDesktopSteamConfiguration(uint AppId)
     {
         configuration = null;
 
-        var canonicalPath = Path.Combine(
+        var packagePath = Path.Combine(
             AppContext.BaseDirectory,
             PackageConfigurationFileName);
-        var canonicalEnvironmentAppId = Environment.GetEnvironmentVariable(
+        var environmentAppId = Environment.GetEnvironmentVariable(
             SteamAppIdVariable);
-        var legacyPath = Path.Combine(
-            AppContext.BaseDirectory,
-            LegacyPackageConfigurationFileName);
-        var legacyEnvironmentAppId = Environment.GetEnvironmentVariable(
-            LegacySteamAppIdVariable);
 
-        var canonicalPackageConfigured = File.Exists(canonicalPath);
-        var canonicalEnvironmentConfigured = !string.IsNullOrWhiteSpace(canonicalEnvironmentAppId);
-        var legacyPackageConfigured = File.Exists(legacyPath);
-        var legacyEnvironmentConfigured = !string.IsNullOrWhiteSpace(legacyEnvironmentAppId);
-
-        var configuredSourceCount = 0;
-        configuredSourceCount += canonicalPackageConfigured ? 1 : 0;
-        configuredSourceCount += canonicalEnvironmentConfigured ? 1 : 0;
-        configuredSourceCount += legacyPackageConfigured ? 1 : 0;
-        configuredSourceCount += legacyEnvironmentConfigured ? 1 : 0;
-        if (configuredSourceCount > 1)
+        var packageConfigured = File.Exists(packagePath);
+        var environmentConfigured = !string.IsNullOrWhiteSpace(environmentAppId);
+        if (packageConfigured && environmentConfigured)
         {
             problem =
-                "Steam platform configuration is ambiguous. Configure exactly one SafeWorld or legacy AppID source.";
+                "Steam platform configuration is ambiguous. Configure exactly one SafeWorld AppID source.";
             return false;
         }
 
-        if (canonicalEnvironmentConfigured)
+        if (environmentConfigured)
         {
-            if (!TryParsePositiveAppId(canonicalEnvironmentAppId, out var appId))
+            if (!TryParsePositiveAppId(environmentAppId, out var appId))
             {
                 problem = $"{SteamAppIdVariable} must be a positive Steam AppID.";
                 return false;
@@ -64,39 +48,19 @@ internal sealed record SafeWorldDesktopSteamConfiguration(uint AppId)
             return true;
         }
 
-        if (canonicalPackageConfigured)
+        if (packageConfigured)
         {
-            return TryLoadCanonicalPackage(
-                canonicalPath,
+            return TryLoadPackage(
+                packagePath,
                 out configuration,
                 out problem);
-        }
-
-        if (legacyPackageConfigured || legacyEnvironmentConfigured)
-        {
-            if (!StewardDesktopSteamConfiguration.TryLoad(
-                    out var legacy,
-                    out problem))
-            {
-                return false;
-            }
-
-            if (legacy is null)
-            {
-                problem = null;
-                return false;
-            }
-
-            configuration = new SafeWorldDesktopSteamConfiguration(legacy.AppId);
-            problem = null;
-            return true;
         }
 
         problem = null;
         return false;
     }
 
-    private static bool TryLoadCanonicalPackage(
+    private static bool TryLoadPackage(
         string path,
         out SafeWorldDesktopSteamConfiguration? configuration,
         out string? problem)

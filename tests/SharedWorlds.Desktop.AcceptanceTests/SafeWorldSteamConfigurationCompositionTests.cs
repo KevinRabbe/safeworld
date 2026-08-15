@@ -5,7 +5,7 @@ namespace SharedWorlds.Desktop.AcceptanceTests;
 public sealed class SafeWorldSteamConfigurationCompositionTests
 {
     [Fact]
-    public void PublicSteamConfigurationUsesSafeWorldNamesAndKeepsLegacyNamesLocal()
+    public void PublicSteamConfigurationUsesOnlySafeWorldNames()
     {
         var source = ReadRepositoryFile(
             "src/SharedWorlds.Desktop/SafeWorldDesktopSteamConfiguration.cs");
@@ -18,29 +18,24 @@ public sealed class SafeWorldSteamConfigurationCompositionTests
             "SteamAppIdVariable = \"SAFEWORLD_STEAM_APP_ID\"",
             source,
             StringComparison.Ordinal);
-        Assert.Contains(
-            "private const string LegacyPackageConfigurationFileName = \"steward-steam.json\"",
-            source,
-            StringComparison.Ordinal);
-        Assert.Contains(
-            "private const string LegacySteamAppIdVariable = \"STEWARD_STEAM_APP_ID\"",
-            source,
-            StringComparison.Ordinal);
+        Assert.DoesNotContain("steward-steam.json", source, StringComparison.Ordinal);
+        Assert.DoesNotContain("STEWARD_STEAM_APP_ID", source, StringComparison.Ordinal);
+        Assert.DoesNotContain("StewardDesktopSteamConfiguration", source, StringComparison.Ordinal);
     }
 
     [Fact]
-    public void SafeWorldConfigurationFailsClosedWhenCanonicalAndLegacySourcesAreMixed()
+    public void SafeWorldConfigurationFailsClosedWhenCanonicalSourcesAreMixed()
     {
         var source = ReadRepositoryFile(
             "src/SharedWorlds.Desktop/SafeWorldDesktopSteamConfiguration.cs");
 
-        Assert.Contains("configuredSourceCount > 1", source, StringComparison.Ordinal);
+        Assert.Contains("packageConfigured && environmentConfigured", source, StringComparison.Ordinal);
         Assert.Contains(
-            "Configure exactly one SafeWorld or legacy AppID source",
+            "Configure exactly one SafeWorld AppID source",
             source,
             StringComparison.Ordinal);
-        Assert.Contains("canonicalPackageConfigured", source, StringComparison.Ordinal);
-        Assert.Contains("legacyPackageConfigured", source, StringComparison.Ordinal);
+        Assert.DoesNotContain("legacyPackageConfigured", source, StringComparison.Ordinal);
+        Assert.DoesNotContain("legacyEnvironmentConfigured", source, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -49,10 +44,10 @@ public sealed class SafeWorldSteamConfigurationCompositionTests
         var source = ReadRepositoryFile(
             "src/SharedWorlds.Desktop/SafeWorldDesktopSteamConfiguration.cs");
 
-        Assert.Contains("TryLoadCanonicalPackage(", source, StringComparison.Ordinal);
+        Assert.Contains("TryLoadPackage(", source, StringComparison.Ordinal);
         Assert.Contains("$\"{PackageConfigurationFileName} must contain one JSON object.\"", source, StringComparison.Ordinal);
         Assert.Contains("$\"{SteamAppIdVariable} must be a positive Steam AppID.\"", source, StringComparison.Ordinal);
-        Assert.Contains("if (legacyPackageConfigured || legacyEnvironmentConfigured)", source, StringComparison.Ordinal);
+        Assert.DoesNotContain("legacy", source, StringComparison.OrdinalIgnoreCase);
     }
 
     [Fact]
