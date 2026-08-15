@@ -1,0 +1,7 @@
+<Project>
+  <Target Name="RejectLegacyRemoteAssemblyInSafeWorldPublish"
+          AfterTargets="Publish">
+    <Error Condition="Exists('$(PublishDir)SharedWorlds.LegacyRemote.dll')"
+           Text="SafeWorld product publish must not contain SharedWorlds.LegacyRemote.dll. Legacy backend compatibility code is not part of the product distribution." />
+  </Target>
+</Project>
