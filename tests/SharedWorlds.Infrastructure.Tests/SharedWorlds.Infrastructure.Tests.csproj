@@ -18,5 +18,6 @@
   <ItemGroup>
     <ProjectReference Include="../../src/SharedWorlds.Core/SharedWorlds.Core.csproj" />
     <ProjectReference Include="../../src/SharedWorlds.Infrastructure/SharedWorlds.Infrastructure.csproj" />
+    <ProjectReference Include="../../src/SharedWorlds.LegacyRemote/SharedWorlds.LegacyRemote.csproj" />
   </ItemGroup>
 </Project>
