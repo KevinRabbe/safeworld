@@ -42,7 +42,7 @@ public sealed class OwnedWorldLocationDesktopCompositionTests
     }
 
     [Fact]
-    public void NormalPeerConstructorAllocatesNoOwnedLocationJournalOrWorker()
+    public void NormalPeerConstructorUsesCanonicalLocalStorageWithoutLegacyMutationObserver()
     {
         var window = File.ReadAllText(FindRepositoryFile(
             "src/SharedWorlds.Desktop/MainWindow.xaml.cs"));
@@ -50,25 +50,12 @@ public sealed class OwnedWorldLocationDesktopCompositionTests
         var constructorEnd = RequiredIndex(window, "private void InitializeLiveRegionAnnouncements()", constructor);
         var body = window[constructor..constructorEnd];
 
+        Assert.Contains("var localStorage = new LocalWorldStorage(_storageRoot);", body, StringComparison.Ordinal);
+        Assert.Contains("_storage = localStorage;", body, StringComparison.Ordinal);
+        Assert.DoesNotContain("OwnedWorldLocationObservedWorldStorage", body, StringComparison.Ordinal);
+        Assert.DoesNotContain("RequestOwnedWorldLocationPublication", body, StringComparison.Ordinal);
         Assert.DoesNotContain("new LocalOwnedWorldLocationPublicationJournal(", body, StringComparison.Ordinal);
         Assert.DoesNotContain("new StewardOwnedWorldLocationPublicationTrigger(", body, StringComparison.Ordinal);
-        Assert.Equal(1, CountOccurrences(body, "new OwnedWorldLocationObservedWorldStorage("));
-        Assert.Contains(
-            "localStorage,\n            RequestOwnedWorldLocationPublication);",
-            body,
-            StringComparison.Ordinal);
-        Assert.Contains(
-            "private IOwnedWorldLocationPublicationJournal? _ownedWorldLocationPublicationJournal;",
-            window,
-            StringComparison.Ordinal);
-        Assert.Contains(
-            "private StewardOwnedWorldLocationPublicationTrigger? _ownedWorldLocationPublicationTrigger;",
-            window,
-            StringComparison.Ordinal);
-        Assert.Contains(
-            "DisposeOwnedWorldLocationMigrationState();\n            DisposeRemoteRuntime();",
-            window,
-            StringComparison.Ordinal);
     }
 
     [Fact]

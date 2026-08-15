@@ -44,14 +44,13 @@ public partial class MainWindow : Window
         InitializeGameTechnicalReadinessUi();
 
         // App resolves/migrates the one durable local root while it owns the desktop single-instance
-        // boundary, before this window can construct any storage/runtime writer. From here on every
-        // SafeWorld-owned location comes from one explicit storage layout.
+        // boundary, before this window can construct any storage/runtime writer. Normal SafeWorld
+        // composition owns local storage directly; legacy backend publication is not attached to the
+        // product mutation path.
         var storageLayout = DesktopStorageLayout.FromResolvedRoot();
         _storageRoot = storageLayout.WorldDataRoot;
         var localStorage = new LocalWorldStorage(_storageRoot);
-        _storage = new OwnedWorldLocationObservedWorldStorage(
-            localStorage,
-            RequestOwnedWorldLocationPublication);
+        _storage = localStorage;
         _workspaceRecoveryStore = new LocalWorkspaceRecoveryStore(_storageRoot);
         _localSessionCoordinator = new LocalWorldSessionCoordinator();
         _localManagedSessionGate = new ManagedWritableSessionGate();

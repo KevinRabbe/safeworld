@@ -80,6 +80,30 @@ public sealed class DependencyBoundaryTests
         Assert.DoesNotContain("RehomeInvitationsToGlobalLobby", startup);
     }
 
+    [Fact]
+    public void PeerProductConstructor_UsesLocalStorageWithoutLegacyPublicationObserver()
+    {
+        var repositoryRoot = FindRepositoryRoot();
+        var windowPath = Path.Combine(
+            repositoryRoot,
+            "src",
+            "SharedWorlds.Desktop",
+            "MainWindow.xaml.cs");
+        var source = File.ReadAllText(windowPath);
+        var constructor = source.IndexOf("public MainWindow()", StringComparison.Ordinal);
+        var constructorEnd = source.IndexOf(
+            "private void InitializeLiveRegionAnnouncements()",
+            constructor,
+            StringComparison.Ordinal);
+
+        Assert.True(constructor >= 0);
+        Assert.True(constructorEnd > constructor);
+        var body = source[constructor..constructorEnd];
+        Assert.Contains("_storage = localStorage;", body);
+        Assert.DoesNotContain("OwnedWorldLocationObservedWorldStorage", body);
+        Assert.DoesNotContain("RequestOwnedWorldLocationPublication", body);
+    }
+
     private static void AssertReferencesOnly(
         string projectPath,
         params string[] allowedProjects)
