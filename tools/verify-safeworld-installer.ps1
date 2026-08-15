@@ -34,8 +34,7 @@ if ([IO.File]::Exists((Join-Path $installRoot 'SharedWorlds.Desktop.exe'))) {
     throw 'Installed product exposes the engineering executable name.'
 }
 
-using namespace Microsoft.Win32
-$uninstallKey = [Registry]::CurrentUser.OpenSubKey($uninstallRegistryPath, writable: false)
+$uninstallKey = [Microsoft.Win32.Registry]::CurrentUser.OpenSubKey($uninstallRegistryPath, writable: false)
 if ($null -eq $uninstallKey) {
     throw 'SafeWorld is not registered for uninstall in the current user profile.'
 }
@@ -70,7 +69,7 @@ if ([IO.File]::Exists((Join-Path $installRoot 'SafeWorld.Desktop.exe'))) {
 if ([IO.File]::Exists($startMenuShortcut)) {
     throw 'SafeWorld Start Menu shortcut remains after uninstall.'
 }
-$remainingUninstallKey = [Registry]::CurrentUser.OpenSubKey($uninstallRegistryPath, writable: false)
+$remainingUninstallKey = [Microsoft.Win32.Registry]::CurrentUser.OpenSubKey($uninstallRegistryPath, writable: false)
 if ($null -ne $remainingUninstallKey) {
     $remainingUninstallKey.Dispose()
     throw 'SafeWorld uninstall registration remains after uninstall.'
