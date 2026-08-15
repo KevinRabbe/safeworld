@@ -63,27 +63,62 @@ public sealed class SafeWorldSteamConfigurationCompositionTests
     }
 
     [Fact]
-    public void PublicBetaPackagerEmitsOnlyCanonicalSafeWorldSteamFilename()
+    public void PublicBetaPackagerSupportsDistributionNeutralBuildWithoutSteamConfiguration()
+    {
+        var source = ReadRepositoryFile("tools/build-safeworld-public-beta.ps1");
+        var normalized = source.Replace("\r\n", "\n", StringComparison.Ordinal);
+        var parameterBlock = normalized[..RequiredIndex(normalized, "Set-StrictMode")];
+
+        Assert.Contains("param(\n    [uint32]$SteamAppId,", parameterBlock, StringComparison.Ordinal);
+        Assert.DoesNotContain(
+            "[Parameter(Mandatory = $true)]\n    [uint32]$SteamAppId",
+            parameterBlock,
+            StringComparison.Ordinal);
+        Assert.Contains(
+            "$steamEnabled = $PSBoundParameters.ContainsKey('SteamAppId')",
+            source,
+            StringComparison.Ordinal);
+        Assert.Contains("$manifestSteamAppId = $null", source, StringComparison.Ordinal);
+        Assert.Contains("$steamConfigurationFileName = $null", source, StringComparison.Ordinal);
+        Assert.Contains("if ($steamEnabled) {", source, StringComparison.Ordinal);
+        Assert.Contains("steamAppId = $manifestSteamAppId", source, StringComparison.Ordinal);
+        Assert.Contains(
+            "steamConfiguration = $steamConfigurationFileName",
+            source,
+            StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void PublicBetaPackagerUsesCanonicalSteamConfigurationWhenAppIdIsSupplied()
     {
         var source = ReadRepositoryFile("tools/build-safeworld-public-beta.ps1");
 
-        Assert.Contains("'safeworld-steam.json'", source, StringComparison.Ordinal);
+        Assert.Contains("$steamConfigurationFileName = 'safeworld-steam.json'", source, StringComparison.Ordinal);
         Assert.Contains(
             "Public beta product must not contain the legacy Steam configuration filename",
             source,
             StringComparison.Ordinal);
         Assert.Contains(
-            "steamConfiguration = 'safeworld-steam.json'",
+            "SteamAppId must be positive when supplied",
             source,
             StringComparison.Ordinal);
         Assert.Contains(
             "AppID 480 is development-only",
             source,
             StringComparison.Ordinal);
+        Assert.DoesNotContain("steward-steam.json'\n", source, StringComparison.Ordinal);
+        Assert.DoesNotContain("STEWARD_STEAM_APP_ID", source, StringComparison.Ordinal);
     }
 
     private static string ReadRepositoryFile(string relativePath)
         => File.ReadAllText(FindRepositoryFile(relativePath));
+
+    private static int RequiredIndex(string source, string value)
+    {
+        var index = source.IndexOf(value, StringComparison.Ordinal);
+        Assert.True(index >= 0, $"Required source fragment was not found: {value}");
+        return index;
+    }
 
     private static string FindRepositoryFile(string relativePath)
     {
