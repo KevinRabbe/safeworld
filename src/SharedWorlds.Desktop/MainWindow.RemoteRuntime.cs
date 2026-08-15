@@ -12,7 +12,6 @@ public partial class MainWindow
     private readonly HashSet<WorldId> _remoteWorldIds = [];
     private readonly HashSet<WorldId> _remoteIncompleteWorldIds = [];
     private StewardDesktopRemoteRuntime? _remoteRuntime;
-    private Exception? _lastRemoteWorldLoadError;
 
     /// <summary>
     /// Connects an already-authenticated Steward session to the retained legacy migration runtime.
@@ -67,7 +66,6 @@ public partial class MainWindow
             cancellationToken.ThrowIfCancellationRequested();
 
             previous = Interlocked.Exchange(ref _remoteRuntime, next);
-            _lastRemoteWorldLoadError = null;
         }
         catch
         {
@@ -96,7 +94,6 @@ public partial class MainWindow
     {
         _remoteWorldIds.Clear();
         _remoteIncompleteWorldIds.Clear();
-        _lastRemoteWorldLoadError = null;
         Interlocked.Exchange(ref _remoteRuntime, null)?.Dispose();
     }
 
