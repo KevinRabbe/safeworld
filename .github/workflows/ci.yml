@@ -95,3 +95,12 @@ jobs:
           if (Test-Path "$env:RUNNER_TEMP/steward-peer-product/steward-friends-build.json") {
             throw 'Ordinary peer product package unexpectedly contains Friends Build backend routing.'
           }
+          $legacyRemoteAssemblies = @(
+            Get-ChildItem `
+              -LiteralPath "$env:RUNNER_TEMP/steward-peer-product" `
+              -Recurse `
+              -File `
+              -Filter 'SharedWorlds.LegacyRemote.dll')
+          if ($legacyRemoteAssemblies.Count -ne 0) {
+            throw 'Ordinary peer product package unexpectedly contains SharedWorlds.LegacyRemote.dll.'
+          }
