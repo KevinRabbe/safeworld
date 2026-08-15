@@ -133,6 +133,42 @@ public sealed class DependencyBoundaryTests
         Assert.False(File.Exists(Path.Combine(infrastructureTestsRoot, "LocalOwnedWorldLocationPublicationJournalTests.cs")));
     }
 
+    [Fact]
+    public void SafeWorldRepository_DoesNotContainLegacyBackendProjects()
+    {
+        var repositoryRoot = FindRepositoryRoot();
+        var backendSourceDirectories = new[]
+        {
+            "SharedWorlds.Backend",
+            "SharedWorlds.Backend.Api",
+            "SharedWorlds.Backend.PostgreSql",
+            "SharedWorlds.Backend.ObjectStorage.S3",
+        };
+        foreach (var directory in backendSourceDirectories)
+        {
+            Assert.False(Directory.Exists(Path.Combine(repositoryRoot, "src", directory)));
+        }
+
+        var backendTestDirectories = new[]
+        {
+            "SharedWorlds.Backend.Tests",
+            "SharedWorlds.Backend.Api.Tests",
+            "SharedWorlds.Backend.PostgreSql.Tests",
+            "SharedWorlds.Backend.ObjectStorage.S3.Tests",
+            "SharedWorlds.BringHere.EndToEndTests",
+        };
+        foreach (var directory in backendTestDirectories)
+        {
+            Assert.False(Directory.Exists(Path.Combine(repositoryRoot, "tests", directory)));
+        }
+
+        Assert.False(File.Exists(Path.Combine(
+            repositoryRoot,
+            ".github",
+            "workflows",
+            "legacy-backend-ci.yml")));
+    }
+
     private static void AssertReferencesOnly(string projectPath, params string[] allowedProjects)
     {
         var actual = ReadProjectReferences(projectPath);
