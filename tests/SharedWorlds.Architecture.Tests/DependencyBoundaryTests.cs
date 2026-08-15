@@ -8,12 +8,7 @@ public sealed class DependencyBoundaryTests
     public void Core_DoesNotReferenceConcreteProjects()
     {
         var repositoryRoot = FindRepositoryRoot();
-        var coreProject = Path.Combine(
-            repositoryRoot,
-            "src",
-            "SharedWorlds.Core",
-            "SharedWorlds.Core.csproj");
-
+        var coreProject = Path.Combine(repositoryRoot, "src", "SharedWorlds.Core", "SharedWorlds.Core.csproj");
         Assert.Empty(ReadProjectReferences(coreProject));
     }
 
@@ -21,17 +16,8 @@ public sealed class DependencyBoundaryTests
     public void Infrastructure_ReferencesOnlyCore()
     {
         var repositoryRoot = FindRepositoryRoot();
-        var coreProject = Path.Combine(
-            repositoryRoot,
-            "src",
-            "SharedWorlds.Core",
-            "SharedWorlds.Core.csproj");
-        var infrastructureProject = Path.Combine(
-            repositoryRoot,
-            "src",
-            "SharedWorlds.Infrastructure",
-            "SharedWorlds.Infrastructure.csproj");
-
+        var coreProject = Path.Combine(repositoryRoot, "src", "SharedWorlds.Core", "SharedWorlds.Core.csproj");
+        var infrastructureProject = Path.Combine(repositoryRoot, "src", "SharedWorlds.Infrastructure", "SharedWorlds.Infrastructure.csproj");
         AssertReferencesOnly(infrastructureProject, coreProject);
     }
 
@@ -39,21 +25,10 @@ public sealed class DependencyBoundaryTests
     public void EachGameAdapter_ReferencesOnlyCore()
     {
         var repositoryRoot = FindRepositoryRoot();
-        var coreProject = Path.Combine(
-            repositoryRoot,
-            "src",
-            "SharedWorlds.Core",
-            "SharedWorlds.Core.csproj");
-        var adaptersRoot = Path.Combine(
-            repositoryRoot,
-            "src",
-            "SharedWorlds.GameAdapters");
-        var adapterProjects = Directory
-            .EnumerateFiles(adaptersRoot, "*.csproj", SearchOption.AllDirectories)
-            .ToArray();
-
+        var coreProject = Path.Combine(repositoryRoot, "src", "SharedWorlds.Core", "SharedWorlds.Core.csproj");
+        var adaptersRoot = Path.Combine(repositoryRoot, "src", "SharedWorlds.GameAdapters");
+        var adapterProjects = Directory.EnumerateFiles(adaptersRoot, "*.csproj", SearchOption.AllDirectories).ToArray();
         Assert.NotEmpty(adapterProjects);
-
         foreach (var adapterProject in adapterProjects)
         {
             AssertReferencesOnly(adapterProject, coreProject);
@@ -64,13 +39,7 @@ public sealed class DependencyBoundaryTests
     public void PeerProductStartup_DoesNotEnterLegacyBackendRuntime()
     {
         var repositoryRoot = FindRepositoryRoot();
-        var startupPath = Path.Combine(
-            repositoryRoot,
-            "src",
-            "SharedWorlds.Desktop",
-            "MainWindow.UnifiedStartup.cs");
-        var startup = File.ReadAllText(startupPath);
-
+        var startup = File.ReadAllText(Path.Combine(repositoryRoot, "src", "SharedWorlds.Desktop", "MainWindow.UnifiedStartup.cs"));
         Assert.Contains("InitializeStewardPeerRuntime();", startup);
         Assert.DoesNotContain("InitializeStewardRemoteSessionAsync(", startup);
         Assert.DoesNotContain("_remoteRuntime", startup);
@@ -84,18 +53,9 @@ public sealed class DependencyBoundaryTests
     public void PeerProductConstructor_UsesLocalStorageWithoutLegacyPublicationObserver()
     {
         var repositoryRoot = FindRepositoryRoot();
-        var windowPath = Path.Combine(
-            repositoryRoot,
-            "src",
-            "SharedWorlds.Desktop",
-            "MainWindow.xaml.cs");
-        var source = File.ReadAllText(windowPath);
+        var source = File.ReadAllText(Path.Combine(repositoryRoot, "src", "SharedWorlds.Desktop", "MainWindow.xaml.cs"));
         var constructor = source.IndexOf("public MainWindow()", StringComparison.Ordinal);
-        var constructorEnd = source.IndexOf(
-            "private void InitializeLiveRegionAnnouncements()",
-            constructor,
-            StringComparison.Ordinal);
-
+        var constructorEnd = source.IndexOf("private void InitializeLiveRegionAnnouncements()", constructor, StringComparison.Ordinal);
         Assert.True(constructor >= 0);
         Assert.True(constructorEnd > constructor);
         var body = source[constructor..constructorEnd];
@@ -108,13 +68,7 @@ public sealed class DependencyBoundaryTests
     public void PeerProductWorldRouting_UsesOnlyLocalAndPeerAuthority()
     {
         var repositoryRoot = FindRepositoryRoot();
-        var routingPath = Path.Combine(
-            repositoryRoot,
-            "src",
-            "SharedWorlds.Desktop",
-            "MainWindow.WorldRouting.cs");
-        var routing = File.ReadAllText(routingPath);
-
+        var routing = File.ReadAllText(Path.Combine(repositoryRoot, "src", "SharedWorlds.Desktop", "MainWindow.WorldRouting.cs"));
         Assert.Contains("await _storage.ListWorldsAsync(cancellationToken)", routing);
         Assert.Contains("localWorld.PeerAuthority is not null", routing);
         Assert.Contains("RequirePeerRuntime(world)", routing);
@@ -125,16 +79,23 @@ public sealed class DependencyBoundaryTests
         Assert.DoesNotContain("HttpClient", routing);
     }
 
-    private static void AssertReferencesOnly(
-        string projectPath,
-        params string[] allowedProjects)
+    [Fact]
+    public void PeerProductSharingUi_HasNoLegacyBackendPublicationOrAccessPath()
+    {
+        var repositoryRoot = FindRepositoryRoot();
+        var sharing = File.ReadAllText(Path.Combine(repositoryRoot, "src", "SharedWorlds.Desktop", "MainWindow.WorldSharing.cs"));
+        Assert.Contains("PeerWorldAccessDialog", sharing);
+        Assert.Contains("InitialShare.ShareAsync", sharing);
+        Assert.DoesNotContain("_remoteRuntime", sharing);
+        Assert.DoesNotContain("_remoteWorldIds", sharing);
+        Assert.DoesNotContain("WorldAccessDialog", sharing);
+        Assert.DoesNotContain("InitialWorldPublisher", sharing);
+    }
+
+    private static void AssertReferencesOnly(string projectPath, params string[] allowedProjects)
     {
         var actual = ReadProjectReferences(projectPath);
-        var expected = allowedProjects
-            .Select(Path.GetFullPath)
-            .OrderBy(path => path, PathComparer())
-            .ToArray();
-
+        var expected = allowedProjects.Select(Path.GetFullPath).OrderBy(path => path, PathComparer()).ToArray();
         Assert.Equal(expected, actual);
     }
 
@@ -142,11 +103,8 @@ public sealed class DependencyBoundaryTests
     {
         var document = XDocument.Load(projectPath);
         var projectDirectory = Path.GetDirectoryName(projectPath)
-            ?? throw new InvalidOperationException(
-                $"Cannot resolve project directory for '{projectPath}'.");
-
-        return document
-            .Descendants("ProjectReference")
+            ?? throw new InvalidOperationException($"Cannot resolve project directory for '{projectPath}'.");
+        return document.Descendants("ProjectReference")
             .Select(element => element.Attribute("Include")?.Value)
             .Where(include => !string.IsNullOrWhiteSpace(include))
             .Select(include => Path.GetFullPath(Path.Combine(projectDirectory, include!)))
@@ -157,23 +115,17 @@ public sealed class DependencyBoundaryTests
     private static string FindRepositoryRoot()
     {
         DirectoryInfo? current = new(AppContext.BaseDirectory);
-
         while (current is not null)
         {
             if (File.Exists(Path.Combine(current.FullName, "SharedWorlds.sln")))
             {
                 return current.FullName;
             }
-
             current = current.Parent;
         }
-
-        throw new InvalidOperationException(
-            "Could not locate repository root from the test output directory.");
+        throw new InvalidOperationException("Could not locate repository root from the test output directory.");
     }
 
     private static StringComparer PathComparer()
-        => OperatingSystem.IsWindows()
-            ? StringComparer.OrdinalIgnoreCase
-            : StringComparer.Ordinal;
+        => OperatingSystem.IsWindows() ? StringComparer.OrdinalIgnoreCase : StringComparer.Ordinal;
 }

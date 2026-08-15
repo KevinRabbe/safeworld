@@ -17,21 +17,18 @@ public sealed class PeerInitialShareCutoverCompositionTests
     }
 
     [Fact]
-    public void FreshLocalOnlyShareBranchesBeforeAnyLegacyRemotePublisherPath()
+    public void FreshLocalOnlyShareUsesPeerAuthorityWithoutBackendPublisher()
     {
         var source = Read("src/SharedWorlds.Desktop/MainWindow.WorldSharing.cs");
         var localOnly = RequiredIndex(source, "if (world.SharingMode == WorldSharingMode.LocalOnly)");
         var peerRuntime = RequiredIndex(source, "var peerShareRuntime = _peerRuntime;", localOnly);
         var initialShare = RequiredIndex(source, "peerShareRuntime.InitialShare.ShareAsync(", peerRuntime);
-        var legacyComment = RequiredIndex(source, "only pre-peer legacy Shared transactions are allowed", initialShare);
-        var remoteRuntime = RequiredIndex(source, "var remoteRuntime = _remoteRuntime;", legacyComment);
-        var publisher = RequiredIndex(source, "remoteRuntime.InitialWorldPublisher.PublishAsync(", remoteRuntime);
 
         Assert.True(localOnly < peerRuntime);
         Assert.True(peerRuntime < initialShare);
-        Assert.True(initialShare < legacyComment);
-        Assert.True(legacyComment < remoteRuntime);
-        Assert.True(remoteRuntime < publisher);
+        Assert.DoesNotContain("_remoteRuntime", source, StringComparison.Ordinal);
+        Assert.DoesNotContain("InitialWorldPublisher", source, StringComparison.Ordinal);
+        Assert.DoesNotContain("WorldAccessDialog", source, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -49,34 +46,30 @@ public sealed class PeerInitialShareCutoverCompositionTests
     }
 
     [Fact]
-    public void FreshPeerShareBlockContainsNoBackendPublicationOrRemoteRuntimeDependency()
+    public void FreshPeerShareContainsNoBackendPublicationDependency()
     {
         var source = Read("src/SharedWorlds.Desktop/MainWindow.WorldSharing.cs");
-        var localOnly = RequiredIndex(source, "if (world.SharingMode == WorldSharingMode.LocalOnly)");
-        var legacyComment = RequiredIndex(source, "only pre-peer legacy Shared transactions are allowed", localOnly);
-        var block = source[localOnly..legacyComment];
 
-        Assert.Contains("peerShareRuntime.InitialShare.ShareAsync", block, StringComparison.Ordinal);
-        Assert.DoesNotContain("_remoteRuntime", block, StringComparison.Ordinal);
-        Assert.DoesNotContain("InitialWorldPublisher", block, StringComparison.Ordinal);
-        Assert.DoesNotContain("OpenRevisionAsync", block, StringComparison.Ordinal);
-        Assert.DoesNotContain("SharingMode = WorldSharingMode.Shared", block, StringComparison.Ordinal);
+        Assert.Contains("peerShareRuntime.InitialShare.ShareAsync", source, StringComparison.Ordinal);
+        Assert.DoesNotContain("_remoteRuntime", source, StringComparison.Ordinal);
+        Assert.DoesNotContain("InitialWorldPublisher", source, StringComparison.Ordinal);
+        Assert.DoesNotContain("OpenRevisionAsync", source, StringComparison.Ordinal);
+        Assert.DoesNotContain("SharingMode = WorldSharingMode.Shared", source, StringComparison.Ordinal);
     }
 
     [Fact]
-    public void LegacyPublisherRejectsPeerAuthorityAndAcceptsOnlyExistingSharedWorld()
+    public void PrePeerSharedWorldIsRefusedInsteadOfPublishedBackToBackend()
     {
         var source = Read("src/SharedWorlds.Desktop/MainWindow.WorldSharing.cs");
-        var legacyComment = RequiredIndex(source, "only pre-peer legacy Shared transactions are allowed");
-        var sharedGate = RequiredIndex(source, "if (world.SharingMode != WorldSharingMode.Shared)", legacyComment);
-        var localGate = RequiredIndex(source, "if (localShadow.SharingMode != WorldSharingMode.Shared ||", sharedGate);
-        var peerReject = RequiredIndex(source, "localShadow.PeerAuthority is not null", localGate);
-        var publisher = RequiredIndex(source, "remoteRuntime.InitialWorldPublisher.PublishAsync(", peerReject);
+        var gate = RequiredIndex(source, "if (world.SharingMode == WorldSharingMode.Shared)");
+        var message = RequiredIndex(
+            source,
+            "predates SafeWorld peer authority. Migrate or re-import it before sharing or writable play.",
+            gate);
 
-        Assert.True(legacyComment < sharedGate);
-        Assert.True(sharedGate < localGate);
-        Assert.True(localGate < peerReject);
-        Assert.True(peerReject < publisher);
+        Assert.True(gate < message);
+        Assert.DoesNotContain("InitialWorldPublisher", source[gate..], StringComparison.Ordinal);
+        Assert.DoesNotContain("_remoteRuntime", source[gate..], StringComparison.Ordinal);
     }
 
     [Fact]
@@ -85,8 +78,8 @@ public sealed class PeerInitialShareCutoverCompositionTests
         var source = Read("src/SharedWorlds.Desktop/MainWindow.WorldSharing.cs");
         var update = RequiredIndex(source, "private void UpdateWorldSharingActionState()");
         var localOnly = RequiredIndex(source, "if (world.SharingMode == WorldSharingMode.LocalOnly)", update);
-        var legacyRetry = RequiredIndex(source, "var legacyRetry =", localOnly);
-        var block = source[localOnly..legacyRetry];
+        var prePeer = RequiredIndex(source, "if (world.SharingMode == WorldSharingMode.Shared)", localOnly);
+        var block = source[localOnly..prePeer];
 
         Assert.Contains("var available = _peerRuntime is not null;", block, StringComparison.Ordinal);
         Assert.Contains("No backend upload is required", block, StringComparison.Ordinal);

@@ -5,19 +5,20 @@ namespace SharedWorlds.Desktop.AcceptanceTests;
 public sealed class PeerWorldAccessCutoverCompositionTests
 {
     [Fact]
-    public void ManageAccessRoutesPersistentPeerWorldBeforeLegacyRemoteWorld()
+    public void ManageAccessRoutesPersistentPeerWorldWithoutLegacyBackendBranch()
     {
         var source = Read("src/SharedWorlds.Desktop/MainWindow.WorldSharing.cs");
         var click = RequiredIndex(source, "private async void ShareWorldButton_Click");
         var peer = RequiredIndex(source, "if (_peerWorldIds.Contains(world.Id))", click);
         var peerDialog = RequiredIndex(source, "new PeerWorldAccessDialog(peer, canonical)", peer);
-        var remote = RequiredIndex(source, "if (_remoteWorldIds.Contains(world.Id))", peerDialog);
-        var legacyDialog = RequiredIndex(source, "new WorldAccessDialog(", remote);
+        var localOnly = RequiredIndex(source, "if (world.SharingMode == WorldSharingMode.LocalOnly)", peerDialog);
 
         Assert.True(click < peer);
         Assert.True(peer < peerDialog);
-        Assert.True(peerDialog < remote);
-        Assert.True(remote < legacyDialog);
+        Assert.True(peerDialog < localOnly);
+        Assert.DoesNotContain("_remoteWorldIds", source, StringComparison.Ordinal);
+        Assert.DoesNotContain("_remoteRuntime", source, StringComparison.Ordinal);
+        Assert.DoesNotContain("new WorldAccessDialog(", source, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -25,8 +26,8 @@ public sealed class PeerWorldAccessCutoverCompositionTests
     {
         var source = Read("src/SharedWorlds.Desktop/MainWindow.WorldSharing.cs");
         var peer = RequiredIndex(source, "if (_peerWorldIds.Contains(world.Id))");
-        var remote = RequiredIndex(source, "if (_remoteWorldIds.Contains(world.Id))", peer);
-        var peerBlock = source[peer..remote];
+        var localOnly = RequiredIndex(source, "if (world.SharingMode == WorldSharingMode.LocalOnly)", peer);
+        var peerBlock = source[peer..localOnly];
 
         Assert.Contains("var peer = _peerRuntime;", peerBlock, StringComparison.Ordinal);
         Assert.Contains("peer.Storage.LoadWorldAsync(world.Id)", peerBlock, StringComparison.Ordinal);
@@ -140,8 +141,8 @@ public sealed class PeerWorldAccessCutoverCompositionTests
         var source = Read("src/SharedWorlds.Desktop/MainWindow.WorldSharing.cs");
         var update = RequiredIndex(source, "private void UpdateWorldSharingActionState()");
         var peer = RequiredIndex(source, "if (_peerWorldIds.Contains(world.Id))", update);
-        var remote = RequiredIndex(source, "if (_remoteWorldIds.Contains(world.Id))", peer);
-        var peerBlock = source[peer..remote];
+        var localOnly = RequiredIndex(source, "if (world.SharingMode == WorldSharingMode.LocalOnly)", peer);
+        var peerBlock = source[peer..localOnly];
 
         Assert.Contains("DesktopText.ManageAccess", peerBlock, StringComparison.Ordinal);
         Assert.Contains("var available = _peerRuntime is not null;", peerBlock, StringComparison.Ordinal);
