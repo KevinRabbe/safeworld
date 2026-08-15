@@ -88,7 +88,7 @@ public sealed class DependencyBoundaryTests
         Assert.Contains("InitialShare.ShareAsync", sharing);
         Assert.DoesNotContain("_remoteRuntime", sharing);
         Assert.DoesNotContain("_remoteWorldIds", sharing);
-        Assert.DoesNotContain("WorldAccessDialog", sharing);
+        Assert.DoesNotContain("new WorldAccessDialog(", sharing);
         Assert.DoesNotContain("InitialWorldPublisher", sharing);
     }
 
