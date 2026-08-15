@@ -4,8 +4,43 @@ namespace SharedWorlds.Desktop.AcceptanceTests;
 
 public sealed class PeerDefaultShellLegacyCatalogCompositionTests
 {
+    private static readonly string[] RetiredDesktopBackendPaths =
+    [
+        "src/SharedWorlds.Desktop/MainWindow.OwnedPrivateWorldBringHere.cs",
+        "src/SharedWorlds.Desktop/MainWindow.OwnedPrivateWorldCatalog.cs",
+        "src/SharedWorlds.Desktop/MainWindow.OwnedWorldLocationPublication.cs",
+        "src/SharedWorlds.Desktop/MainWindow.RemoteRuntime.cs",
+        "src/SharedWorlds.Desktop/StewardDesktopRemoteRuntime.cs",
+        "src/SharedWorlds.Desktop/WorldAccessDialog.cs"
+    ];
+
     [Fact]
-    public void NormalPeerStartupDoesNotInitializeLegacyOwnedPrivateCatalogOrBringHere()
+    public void LegacyBackendRuntimeAndOwnedPrivateDesktopSourcesAreAbsent()
+    {
+        var root = FindRepositoryRoot();
+
+        foreach (var relativePath in RetiredDesktopBackendPaths)
+        {
+            Assert.False(
+                File.Exists(Path.Combine(root, relativePath)),
+                $"Retired Desktop backend source '{relativePath}' must not re-enter the SafeWorld product assembly.");
+        }
+    }
+
+    [Fact]
+    public void MainWindowOwnsNoLegacyBackendPublicationOrCatalogState()
+    {
+        var source = ReadRepositoryFile("src/SharedWorlds.Desktop/MainWindow.xaml.cs");
+
+        Assert.DoesNotContain("SharedWorlds.Infrastructure.Remote", source, StringComparison.Ordinal);
+        Assert.DoesNotContain("_ownedWorldLocation", source, StringComparison.Ordinal);
+        Assert.DoesNotContain("DisposeOwnedWorldLocationMigrationState", source, StringComparison.Ordinal);
+        Assert.DoesNotContain("DisposeRemoteRuntime", source, StringComparison.Ordinal);
+        Assert.DoesNotContain("SetOwnedPrivateWorldCatalogBusyState", source, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void NormalPeerStartupHasNoLegacyBackendCompositionEntryPoint()
     {
         var source = ReadStartup();
 
@@ -14,18 +49,6 @@ public sealed class PeerDefaultShellLegacyCatalogCompositionTests
         Assert.DoesNotContain("InitializeOwnedPrivateWorldBringHereAction", source, StringComparison.Ordinal);
         Assert.DoesNotContain("InitializeStewardRemoteSessionAsync", source, StringComparison.Ordinal);
         Assert.DoesNotContain("_remoteRuntime", source, StringComparison.Ordinal);
-    }
-
-    [Fact]
-    public void PeerDefaultConstructorDoesNotBuildLegacyOwnedPrivateCatalogPresentation()
-    {
-        var source = ReadRepositoryFile("src/SharedWorlds.Desktop/MainWindow.xaml.cs");
-        var constructor = RequiredIndex(source, "public MainWindow()");
-        var constructorEnd = RequiredIndex(source, "private void InitializeLiveRegionAnnouncements()", constructor);
-        var body = source[constructor..constructorEnd];
-
-        Assert.DoesNotContain("InitializeOwnedPrivateWorldCatalogUi", body, StringComparison.Ordinal);
-        Assert.DoesNotContain("InitializeOwnedPrivateWorldBringHereAction", body, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -57,7 +80,7 @@ public sealed class PeerDefaultShellLegacyCatalogCompositionTests
         => ReadRepositoryFile("src/SharedWorlds.Desktop/MainWindow.UnifiedStartup.cs");
 
     private static string ReadRepositoryFile(string relativePath)
-        => File.ReadAllText(FindRepositoryFile(relativePath));
+        => File.ReadAllText(Path.Combine(FindRepositoryRoot(), relativePath));
 
     private static int RequiredIndex(string source, string value, int startIndex = 0)
     {
@@ -66,29 +89,25 @@ public sealed class PeerDefaultShellLegacyCatalogCompositionTests
         return index;
     }
 
-    private static string FindRepositoryFile(string relativePath)
+    private static string FindRepositoryRoot()
     {
         var workspace = Environment.GetEnvironmentVariable("GITHUB_WORKSPACE");
-        if (!string.IsNullOrWhiteSpace(workspace))
+        if (!string.IsNullOrWhiteSpace(workspace) &&
+            File.Exists(Path.Combine(workspace, "SharedWorlds.sln")))
         {
-            var candidate = Path.Combine(workspace, relativePath);
-            if (File.Exists(candidate))
-            {
-                return candidate;
-            }
+            return workspace;
         }
 
         for (var directory = new DirectoryInfo(AppContext.BaseDirectory);
              directory is not null;
              directory = directory.Parent)
         {
-            var candidate = Path.Combine(directory.FullName, relativePath);
-            if (File.Exists(candidate))
+            if (File.Exists(Path.Combine(directory.FullName, "SharedWorlds.sln")))
             {
-                return candidate;
+                return directory.FullName;
             }
         }
 
-        throw new FileNotFoundException($"Could not locate repository file '{relativePath}'.");
+        throw new DirectoryNotFoundException("Could not locate the SafeWorld repository root.");
     }
 }

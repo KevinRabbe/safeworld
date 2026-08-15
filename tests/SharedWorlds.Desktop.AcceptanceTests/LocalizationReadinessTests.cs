@@ -76,10 +76,10 @@ public sealed class LocalizationReadinessTests
         Assert.Contains("DesktopText.HostingOnThisDevice", controls, StringComparison.Ordinal);
         Assert.Contains("DesktopText.CreateWorld", creation, StringComparison.Ordinal);
         Assert.Contains("DesktopText.Lobby", shell, StringComparison.Ordinal);
-        Assert.Contains("DesktopText.PlayingNow", shell, StringComparison.Ordinal);
-        Assert.Contains("DesktopText.WorldGroup", shell, StringComparison.Ordinal);
-        Assert.Contains("DesktopText.HostStartingSuffix", shell, StringComparison.Ordinal);
-        Assert.Contains("DesktopText.AccessManagerSuffix", shell, StringComparison.Ordinal);
+        Assert.Contains("DesktopText.LobbyDescription", shell, StringComparison.Ordinal);
+        Assert.Contains("DesktopText.NoSharedWorlds", shell, StringComparison.Ordinal);
+        Assert.Contains("DesktopText.OpenWorld", shell, StringComparison.Ordinal);
+        Assert.Contains("DesktopText.More", shell, StringComparison.Ordinal);
         Assert.Contains("DesktopText.DangerZone", deletion, StringComparison.Ordinal);
         Assert.Contains("DesktopText.Preparing", attention, StringComparison.Ordinal);
         Assert.Contains("DesktopText.Hosting", attention, StringComparison.Ordinal);

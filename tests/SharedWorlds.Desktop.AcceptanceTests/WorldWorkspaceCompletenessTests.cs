@@ -93,7 +93,7 @@ public sealed class WorldWorkspaceCompletenessTests
     }
 
     [Fact]
-    public void ProductShellUsesCrossGameLobbyAndConsistentActionGroups()
+    public void ProductShellUsesPeerCrossGameLobbyAndConsistentActionGroups()
     {
         var shell = File.ReadAllText(FindRepositoryFile(
             "src/SharedWorlds.Desktop/MainWindow.ProductShell.cs"));
@@ -103,10 +103,13 @@ public sealed class WorldWorkspaceCompletenessTests
         Assert.Contains("InitializeProfessionalProductShell();", startup, StringComparison.Ordinal);
         Assert.Contains("Content = DesktopText.Lobby", shell, StringComparison.Ordinal);
         Assert.Contains("_allWorldItems", shell, StringComparison.Ordinal);
-        Assert.Contains("_remoteWorldIds.Contains(item.World.Id)", shell, StringComparison.Ordinal);
-        Assert.Contains("runtime.PlayerPresence.GetSnapshotAsync(item.World.Id)", shell, StringComparison.Ordinal);
-        Assert.Contains("runtime.Access.ListMembersAsync(item.World.Id)", shell, StringComparison.Ordinal);
-        Assert.Contains("runtime.GetWorldMetadataAsync(item.World.Id)", shell, StringComparison.Ordinal);
+        Assert.Contains("_peerWorldIds.Contains(item.World.Id)", shell, StringComparison.Ordinal);
+        Assert.Contains("var peerRuntimeAvailable = _peerRuntime is not null;", shell, StringComparison.Ordinal);
+        Assert.Contains("CreateGlobalLobbyWorldCard(item, peerRuntimeAvailable)", shell, StringComparison.Ordinal);
+        Assert.DoesNotContain("_remoteWorldIds", shell, StringComparison.Ordinal);
+        Assert.DoesNotContain("PlayerPresence", shell, StringComparison.Ordinal);
+        Assert.DoesNotContain("runtime.Access", shell, StringComparison.Ordinal);
+        Assert.DoesNotContain("GetWorldMetadataAsync", shell, StringComparison.Ordinal);
         Assert.Contains("NormalizeActionButton(ContinueButton, WorldActionButtonWidth, 42);", shell, StringComparison.Ordinal);
         Assert.Contains("NormalizeActionButton(HostButton, WorldActionButtonWidth, 42);", shell, StringComparison.Ordinal);
         Assert.Contains("NormalizeActionButton(ShareButton, WorldActionButtonWidth, 42);", shell, StringComparison.Ordinal);
