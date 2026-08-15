@@ -1,8 +1,5 @@
 <Project Sdk="Microsoft.NET.Sdk">
   <PropertyGroup>
-    <TargetFramework>net10.0</TargetFramework>
-    <ImplicitUsings>enable</ImplicitUsings>
-    <Nullable>enable</Nullable>
     <EnableDefaultCompileItems>false</EnableDefaultCompileItems>
     <AssemblyName>SharedWorlds.LegacyRemote</AssemblyName>
     <Description>Historical backend client and migration compatibility surface. This assembly is not part of the SafeWorld product distribution.</Description>
@@ -10,9 +7,6 @@
   <ItemGroup>
     <Compile Include="../SharedWorlds.Infrastructure/Remote/**/*.cs"
              Link="Remote/%(RecursiveDir)%(Filename)%(Extension)" />
-  </ItemGroup>
-  <ItemGroup>
-    <PackageReference Include="NSec.Cryptography" Version="25.4.0" />
   </ItemGroup>
   <ItemGroup>
     <ProjectReference Include="../SharedWorlds.Core/SharedWorlds.Core.csproj" />
