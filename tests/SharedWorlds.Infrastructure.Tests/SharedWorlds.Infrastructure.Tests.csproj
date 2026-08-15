@@ -16,8 +16,14 @@
     </PackageReference>
   </ItemGroup>
   <ItemGroup>
+    <Compile Remove="BackendSimulation/**/*.cs" />
+    <Compile Remove="Remote/**/*.cs" />
+    <Compile Remove="Steward*.cs" />
+    <Compile Remove="LocalOwnedWorldLocationPublicationJournalTests.cs" />
+    <Compile Remove="OwnedWorldLocation*.cs" />
+  </ItemGroup>
+  <ItemGroup>
     <ProjectReference Include="../../src/SharedWorlds.Core/SharedWorlds.Core.csproj" />
     <ProjectReference Include="../../src/SharedWorlds.Infrastructure/SharedWorlds.Infrastructure.csproj" />
-    <ProjectReference Include="../../src/SharedWorlds.LegacyRemote/SharedWorlds.LegacyRemote.csproj" />
   </ItemGroup>
 </Project>
