@@ -29,21 +29,26 @@ public sealed class WorldLobbyPresentationTests
     }
 
     [Fact]
-    public void AutomaticJoinPublishesOnlyAfterClientLaunchAndClearsAfterObservedEnd()
+    public void LiveJoinReadinessComesFromAttachedAuthoritativeSteamLobbyOnly()
     {
-        var source = File.ReadAllText(FindRepositoryFile(
-            "src/SharedWorlds.Desktop/CoordinatedJoinGameAdapter.cs"));
-        var launch = source.IndexOf("await _inner.LaunchClientAsync", StringComparison.Ordinal);
-        var publish = source.IndexOf("await StartPresenceAsync()", StringComparison.Ordinal);
-        var observedEnd = source.IndexOf("await _inner.WaitForSessionEndAsync", StringComparison.Ordinal);
-        var clear = source.IndexOf("await StopPresenceAsync()", observedEnd, StringComparison.Ordinal);
+        var join = File.ReadAllText(FindRepositoryFile(
+            "src/SharedWorlds.Desktop/MainWindow.WorldJoin.cs"));
+        var participants = File.ReadAllText(FindRepositoryFile(
+            "src/SharedWorlds.Desktop/SteamPeerWorldLobby.Participants.cs"));
 
-        Assert.True(launch >= 0);
-        Assert.True(publish > launch);
-        Assert.True(observedEnd > publish);
-        Assert.True(clear > observedEnd);
-        Assert.Contains("TimeSpan.FromSeconds(15)", source, StringComparison.Ordinal);
-        Assert.Contains("TTL expiration is the fallback", source, StringComparison.Ordinal);
+        Assert.Contains("snapshot = await peerRuntime.Lobby.GetAsync(world.Id);", join, StringComparison.Ordinal);
+        Assert.Contains("!snapshot.OwnerConfirmed", join, StringComparison.Ordinal);
+        Assert.Contains("snapshot.AuthorityGeneration == 0", join, StringComparison.Ordinal);
+        Assert.Contains("snapshot.RequestedHost is not null", join, StringComparison.Ordinal);
+        Assert.DoesNotContain("StewardWorldPlayerPresenceClient", join, StringComparison.Ordinal);
+        Assert.DoesNotContain("GetHostPresenceAsync", join, StringComparison.Ordinal);
+        Assert.DoesNotContain("SharedWorlds.Infrastructure.Remote", join, StringComparison.Ordinal);
+
+        Assert.Contains("ListCurrentMembersAsync(", participants, StringComparison.Ordinal);
+        Assert.Contains("RequireKnownLobby(worldId)", participants, StringComparison.Ordinal);
+        Assert.Contains("EnsureWritableOwner(", participants, StringComparison.Ordinal);
+        Assert.Contains("SteamMatchmaking.GetNumLobbyMembers(lobbyId)", participants, StringComparison.Ordinal);
+        Assert.DoesNotContain("SetLobbyData", participants, StringComparison.Ordinal);
     }
 
     private static string FindRepositoryFile(string relativePath)
