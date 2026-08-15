@@ -106,8 +106,19 @@ public sealed class SafeWorldSteamConfigurationCompositionTests
             "AppID 480 is development-only",
             source,
             StringComparison.Ordinal);
-        Assert.DoesNotContain("steward-steam.json'\n", source, StringComparison.Ordinal);
         Assert.DoesNotContain("STEWARD_STEAM_APP_ID", source, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void InstallerReplacesPackageOwnedSteamConfigurationOnEveryInstall()
+    {
+        var source = ReadRepositoryFile("installer/windows/SafeWorldInstaller.nsi");
+        var legacyDelete = RequiredIndex(source, "Delete \"$INSTDIR\\steward-steam.json\"");
+        var canonicalDelete = RequiredIndex(source, "Delete \"$INSTDIR\\safeworld-steam.json\"");
+        var productCopy = RequiredIndex(source, "File /r \"${PRODUCT_ROOT}\\*.*\"");
+
+        Assert.True(legacyDelete < productCopy);
+        Assert.True(canonicalDelete < productCopy);
     }
 
     private static string ReadRepositoryFile(string relativePath)
