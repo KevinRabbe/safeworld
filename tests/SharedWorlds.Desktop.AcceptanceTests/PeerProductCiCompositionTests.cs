@@ -73,18 +73,9 @@ public sealed class PeerProductCiCompositionTests
     }
 
     [Fact]
-    public void LegacyBackendQualificationIsSeparateAndPathScoped()
+    public void LegacyBackendQualificationWorkflowIsNotPartOfSafeWorld()
     {
-        var source = ReadRepositoryFile(".github/workflows/legacy-backend-ci.yml");
-
-        Assert.Contains("name: Legacy backend CI", source, StringComparison.Ordinal);
-        Assert.Contains("workflow_dispatch:", source, StringComparison.Ordinal);
-        Assert.Contains("pull_request:", source, StringComparison.Ordinal);
-        Assert.Contains("paths:", source, StringComparison.Ordinal);
-        Assert.Contains("src/SharedWorlds.Backend.Api/**", source, StringComparison.Ordinal);
-        Assert.Contains("Legacy PostgreSQL integration", source, StringComparison.Ordinal);
-        Assert.Contains("Legacy S3-compatible integration", source, StringComparison.Ordinal);
-        Assert.Contains("Legacy backend container", source, StringComparison.Ordinal);
+        Assert.False(File.Exists(FindRepositoryFile(".github/workflows/legacy-backend-ci.yml")));
     }
 
     [Fact]
