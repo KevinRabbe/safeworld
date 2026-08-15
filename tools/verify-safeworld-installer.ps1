@@ -51,9 +51,10 @@ finally {
     $uninstallKey.Dispose()
 }
 
-# SafeWorld World data is deliberately outside the application directory. A sentinel here proves
-# that uninstall removes application bytes and Windows integration without deleting persisted Worlds.
-$worldDataRoot = Join-Path $env:LOCALAPPDATA 'SharedWorlds'
+# SafeWorld World data is deliberately outside the application directory. A sentinel in the
+# canonical durable root proves uninstall removes application bytes and Windows integration
+# without deleting persisted Worlds.
+$worldDataRoot = Join-Path $env:LOCALAPPDATA 'SafeWorld'
 [IO.Directory]::CreateDirectory($worldDataRoot) | Out-Null
 $worldSentinel = Join-Path $worldDataRoot 'installer-preserves-world-data.txt'
 [IO.File]::WriteAllText($worldSentinel, 'preserve')

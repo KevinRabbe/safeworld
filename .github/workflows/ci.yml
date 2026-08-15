@@ -104,3 +104,36 @@ jobs:
           if ($legacyRemoteAssemblies.Count -ne 0) {
             throw 'Ordinary peer product package unexpectedly contains SharedWorlds.LegacyRemote.dll.'
           }
+
+      - name: Build and verify distribution-neutral public installer
+        if: matrix.os == 'windows-latest'
+        shell: pwsh
+        run: |
+          choco install nsis --no-progress -y
+          if ($LASTEXITCODE -ne 0) {
+            throw "NSIS installation failed with exit code $LASTEXITCODE."
+          }
+
+          $output = "$env:RUNNER_TEMP/safeworld-distribution-neutral"
+          $version = '0.1.0-ci'
+          ./tools/build-safeworld-public-beta.ps1 `
+            -Version $version `
+            -OutputDirectory $output
+
+          $manifestPath = Join-Path $output 'safeworld-public-beta.json'
+          $manifest = Get-Content -LiteralPath $manifestPath -Raw | ConvertFrom-Json
+          if ($manifest.sourceCommitSha -ne '${{ github.sha }}') {
+            throw 'Distribution-neutral installer manifest is not bound to the workflow commit.'
+          }
+          if ($null -ne $manifest.steamAppId) {
+            throw 'Distribution-neutral installer unexpectedly declares a Steam AppID.'
+          }
+          if ($null -ne $manifest.steamConfiguration) {
+            throw 'Distribution-neutral installer unexpectedly declares a Steam configuration file.'
+          }
+          if (Test-Path (Join-Path $output 'product/safeworld-steam.json')) {
+            throw 'Distribution-neutral installer product unexpectedly contains safeworld-steam.json.'
+          }
+
+          $installerPath = Join-Path $output "SafeWorld-Setup-$version.exe"
+          ./tools/verify-safeworld-installer.ps1 -InstallerPath $installerPath
