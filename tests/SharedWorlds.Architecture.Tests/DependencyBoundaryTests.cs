@@ -104,6 +104,27 @@ public sealed class DependencyBoundaryTests
         Assert.DoesNotContain("RequestOwnedWorldLocationPublication", body);
     }
 
+    [Fact]
+    public void PeerProductWorldRouting_UsesOnlyLocalAndPeerAuthority()
+    {
+        var repositoryRoot = FindRepositoryRoot();
+        var routingPath = Path.Combine(
+            repositoryRoot,
+            "src",
+            "SharedWorlds.Desktop",
+            "MainWindow.WorldRouting.cs");
+        var routing = File.ReadAllText(routingPath);
+
+        Assert.Contains("await _storage.ListWorldsAsync(cancellationToken)", routing);
+        Assert.Contains("localWorld.PeerAuthority is not null", routing);
+        Assert.Contains("RequirePeerRuntime(world)", routing);
+        Assert.DoesNotContain("_remoteRuntime", routing);
+        Assert.DoesNotContain("_remoteWorldIds", routing);
+        Assert.DoesNotContain("StewardDesktopRemoteRuntime", routing);
+        Assert.DoesNotContain("SharedWorlds.Infrastructure.Remote", routing);
+        Assert.DoesNotContain("HttpClient", routing);
+    }
+
     private static void AssertReferencesOnly(
         string projectPath,
         params string[] allowedProjects)
