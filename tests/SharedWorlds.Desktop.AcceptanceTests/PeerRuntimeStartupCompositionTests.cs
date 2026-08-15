@@ -86,6 +86,62 @@ public sealed class PeerRuntimeStartupCompositionTests
         Assert.True(firstReturn < peerCreation);
     }
 
+    [Fact]
+    public void LocalPlayRemainsDistributionNeutralWhileSharedPlayRequiresPeerAuthority()
+    {
+        var routing = Read("src/SharedWorlds.Desktop/MainWindow.WorldRouting.cs");
+        var localOnlyGate = RequiredIndex(
+            routing,
+            "if (world.SharingMode == WorldSharingMode.LocalOnly)");
+        var localAuthority = RequiredIndex(routing, "return true;", localOnlyGate);
+        var peerAuthority = RequiredIndex(
+            routing,
+            "return _peerWorldIds.Contains(world.Id) && _peerRuntime is not null;",
+            localAuthority);
+
+        Assert.True(localOnlyGate < localAuthority);
+        Assert.True(localAuthority < peerAuthority);
+
+        var readiness = Read("src/SharedWorlds.Desktop/MainWindow.EnvironmentReadiness.cs");
+        var readinessStart = RequiredIndex(
+            readiness,
+            "private bool IsSelectedWorldEnvironmentReadyForPlay()");
+        var readinessEnd = RequiredIndex(
+            readiness,
+            "private EnvironmentVerificationReport? GetEnvironmentVerificationFor",
+            readinessStart);
+        var readinessBody = readiness[readinessStart..readinessEnd];
+
+        Assert.Contains("HasAuthoritativeRuntimeForWorld(world)", readinessBody, StringComparison.Ordinal);
+        Assert.Contains(
+            "world.SharingMode == WorldSharingMode.LocalOnly",
+            readinessBody,
+            StringComparison.Ordinal);
+
+        var games = Read("src/SharedWorlds.Desktop/MainWindow.UnifiedGames.cs");
+        var continueStart = RequiredIndex(games, "private async void UnifiedContinueButton_Click");
+        var hostStart = RequiredIndex(games, "private async void UnifiedHostButton_Click", continueStart);
+        var refreshStart = RequiredIndex(games, "private async Task RefreshUnifiedWorldsAsync", hostStart);
+        var actionStateStart = RequiredIndex(games, "private void UpdateUnifiedActionState()");
+        var actionStateEnd = RequiredIndex(
+            games,
+            "private void UpdateUnifiedImportActionState()",
+            actionStateStart);
+
+        Assert.Contains(
+            "if (!IsSelectedWorldEnvironmentReadyForPlay())",
+            games[continueStart..hostStart],
+            StringComparison.Ordinal);
+        Assert.Contains(
+            "if (!IsSelectedWorldEnvironmentReadyForPlay())",
+            games[hostStart..refreshStart],
+            StringComparison.Ordinal);
+        Assert.Contains(
+            "var environmentReady = IsSelectedWorldEnvironmentReadyForPlay();",
+            games[actionStateStart..actionStateEnd],
+            StringComparison.Ordinal);
+    }
+
     private static string Read(string relativePath)
         => File.ReadAllText(FindRepositoryFile(relativePath));
 
