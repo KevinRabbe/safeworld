@@ -4,13 +4,10 @@ on:
   push:
     branches:
       - "safeworld-public-beta-*"
-  pull_request:
-    branches:
-      - "hardening/steward-peer-architecture-v1"
   workflow_dispatch:
     inputs:
       steam_app_id:
-        description: "Real SafeWorld Steam AppID. Leave blank for structural CI only."
+        description: "Optional SafeWorld Steam AppID. Leave blank for a distribution-neutral installer."
         required: false
         type: string
       version:
@@ -32,7 +29,7 @@ jobs:
     runs-on: windows-2022
     timeout-minutes: 30
     env:
-      SOURCE_SHA: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.sha || github.sha }}
+      SOURCE_SHA: ${{ github.sha }}
       REQUESTED_STEAM_APP_ID: ${{ github.event.inputs.steam_app_id }}
       REQUESTED_VERSION: ${{ github.event.inputs.version }}
     steps:
@@ -55,8 +52,9 @@ jobs:
             throw "Checkout SHA '$actualSha' does not match '$env:SOURCE_SHA'."
           }
 
-          $candidate = -not [string]::IsNullOrWhiteSpace($env:REQUESTED_STEAM_APP_ID)
-          if ($candidate) {
+          $steamEnabled = -not [string]::IsNullOrWhiteSpace($env:REQUESTED_STEAM_APP_ID)
+          $appIdText = ''
+          if ($steamEnabled) {
             [uint32]$appId = 0
             if (-not [uint32]::TryParse($env:REQUESTED_STEAM_APP_ID, [ref]$appId) -or $appId -eq 0) {
               throw 'steam_app_id must be a positive UInt32.'
@@ -64,41 +62,84 @@ jobs:
             if ($appId -eq 480) {
               throw 'AppID 480 is development-only and cannot qualify as a SafeWorld public beta.'
             }
-            $version = if ([string]::IsNullOrWhiteSpace($env:REQUESTED_VERSION)) { '0.1.0-beta.1' } else { $env:REQUESTED_VERSION }
-          }
-          else {
-            [uint32]$appId = 123456789
-            $version = "0.1.0-beta-ci.${{ github.run_number }}"
+            $appIdText = $appId.ToString([Globalization.CultureInfo]::InvariantCulture)
           }
 
-          "app_id=$appId" >> $env:GITHUB_OUTPUT
+          $version = if ([string]::IsNullOrWhiteSpace($env:REQUESTED_VERSION)) {
+            "0.1.0-beta-ci.${{ github.run_number }}"
+          }
+          else {
+            $env:REQUESTED_VERSION
+          }
+          $channel = if ($steamEnabled) { 'steam' } else { 'standalone' }
+
+          "app_id=$appIdText" >> $env:GITHUB_OUTPUT
           "version=$version" >> $env:GITHUB_OUTPUT
-          "candidate=$($candidate.ToString().ToLowerInvariant())" >> $env:GITHUB_OUTPUT
+          "steam_enabled=$($steamEnabled.ToString().ToLowerInvariant())" >> $env:GITHUB_OUTPUT
+          "channel=$channel" >> $env:GITHUB_OUTPUT
 
       - name: Build installer
         shell: pwsh
         run: |
           $output = "$env:RUNNER_TEMP/safeworld-public-beta"
-          ./tools/build-safeworld-public-beta.ps1 `
-            -SteamAppId ${{ steps.identity.outputs.app_id }} `
-            -Version '${{ steps.identity.outputs.version }}' `
-            -OutputDirectory $output
+          $arguments = @{
+            Version = '${{ steps.identity.outputs.version }}'
+            OutputDirectory = $output
+          }
+          if ('${{ steps.identity.outputs.steam_enabled }}' -eq 'true') {
+            $arguments.SteamAppId = [uint32]'${{ steps.identity.outputs.app_id }}'
+          }
+          ./tools/build-safeworld-public-beta.ps1 @arguments
 
       - name: Verify product boundary
         shell: pwsh
         run: |
           $output = "$env:RUNNER_TEMP/safeworld-public-beta"
           $product = Join-Path $output 'product'
+          $manifestPath = Join-Path $output 'safeworld-public-beta.json'
           $installer = Join-Path $output 'SafeWorld-Setup-${{ steps.identity.outputs.version }}.exe'
           foreach ($required in @(
             (Join-Path $product 'SafeWorld.Desktop.exe'),
             (Join-Path $product 'SafeWorld.Desktop.dll'),
             (Join-Path $product 'steam_api64.dll'),
-            (Join-Path $output 'safeworld-public-beta.json'),
+            $manifestPath,
             $installer)) {
             if (-not (Test-Path -LiteralPath $required -PathType Leaf)) {
               throw "SafeWorld beta output is missing '$required'."
             }
+          }
+
+          $manifest = Get-Content -LiteralPath $manifestPath -Raw | ConvertFrom-Json
+          if (-not [string]::Equals([string]$manifest.sourceCommitSha, $env:SOURCE_SHA, [StringComparison]::OrdinalIgnoreCase)) {
+            throw 'SafeWorld beta manifest is not bound to the workflow commit.'
+          }
+
+          $canonicalSteamConfiguration = Join-Path $product 'safeworld-steam.json'
+          if ('${{ steps.identity.outputs.steam_enabled }}' -eq 'true') {
+            if (-not (Test-Path -LiteralPath $canonicalSteamConfiguration -PathType Leaf)) {
+              throw 'Steam-enabled SafeWorld beta is missing safeworld-steam.json.'
+            }
+            if ([uint32]$manifest.steamAppId -ne [uint32]'${{ steps.identity.outputs.app_id }}') {
+              throw 'Steam-enabled SafeWorld beta manifest has the wrong AppID.'
+            }
+            if ([string]$manifest.steamConfiguration -ne 'safeworld-steam.json') {
+              throw 'Steam-enabled SafeWorld beta manifest has the wrong configuration filename.'
+            }
+          }
+          else {
+            if (Test-Path -LiteralPath $canonicalSteamConfiguration) {
+              throw 'Distribution-neutral SafeWorld beta unexpectedly contains safeworld-steam.json.'
+            }
+            if ($null -ne $manifest.steamAppId) {
+              throw 'Distribution-neutral SafeWorld beta unexpectedly declares a Steam AppID.'
+            }
+            if ($null -ne $manifest.steamConfiguration) {
+              throw 'Distribution-neutral SafeWorld beta unexpectedly declares Steam configuration.'
+            }
+          }
+
+          if (Test-Path -LiteralPath (Join-Path $product 'steward-steam.json')) {
+            throw 'SafeWorld beta product contains legacy Steam configuration.'
           }
           if (Test-Path -LiteralPath (Join-Path $product 'SharedWorlds.Desktop.exe')) {
             throw 'Public beta product still exposes the engineering Desktop executable name.'
@@ -116,10 +157,15 @@ jobs:
           $installer = Join-Path `
             "$env:RUNNER_TEMP/safeworld-public-beta" `
             'SafeWorld-Setup-${{ steps.identity.outputs.version }}.exe'
-          ./tools/verify-safeworld-installer-lifecycle.ps1 -InstallerPath $installer
+          if ('${{ steps.identity.outputs.steam_enabled }}' -eq 'true') {
+            ./tools/verify-safeworld-installer-lifecycle.ps1 -InstallerPath $installer
+          }
+          else {
+            ./tools/verify-safeworld-installer.ps1 -InstallerPath $installer
+          }
 
-      - name: Verify real candidate signatures
-        if: ${{ github.event_name == 'workflow_dispatch' && steps.identity.outputs.candidate == 'true' }}
+      - name: Verify signed Steam candidate
+        if: ${{ github.event_name == 'workflow_dispatch' && steps.identity.outputs.steam_enabled == 'true' }}
         shell: pwsh
         run: |
           $output = "$env:RUNNER_TEMP/safeworld-public-beta"
@@ -127,11 +173,11 @@ jobs:
             (Join-Path $output 'product/SafeWorld.Desktop.exe'),
             (Join-Path $output 'SafeWorld-Setup-${{ steps.identity.outputs.version }}.exe'))
 
-      - name: Upload real public-beta candidate
-        if: ${{ github.event_name == 'workflow_dispatch' && steps.identity.outputs.candidate == 'true' }}
+      - name: Upload SafeWorld beta package
+        if: ${{ github.event_name == 'workflow_dispatch' || startsWith(github.ref, 'refs/heads/safeworld-public-beta-') }}
         uses: actions/upload-artifact@v6
         with:
-          name: safeworld-public-beta-${{ steps.identity.outputs.version }}-${{ env.SOURCE_SHA }}
+          name: safeworld-${{ steps.identity.outputs.channel }}-${{ steps.identity.outputs.version }}-${{ env.SOURCE_SHA }}
           path: |
             ${{ runner.temp }}/safeworld-public-beta/SafeWorld-Setup-${{ steps.identity.outputs.version }}.exe
             ${{ runner.temp }}/safeworld-public-beta/SafeWorld-Setup-${{ steps.identity.outputs.version }}.sha256

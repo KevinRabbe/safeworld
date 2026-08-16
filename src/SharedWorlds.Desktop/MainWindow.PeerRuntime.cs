@@ -10,9 +10,9 @@ public partial class MainWindow
     private string? _peerRuntimeProblem;
 
     /// <summary>
-    /// Creates Steward's embedded peer gameplay runtime from the one App-owned Steam lifetime. Remote
-    /// HTTP authentication is deliberately not an input: a valid Steam AppID plus this installation's
-    /// durable identity are sufficient to compose peer authority, transfer, and game-data services.
+    /// Creates SafeWorld's embedded peer gameplay runtime from the one App-owned Steam lifetime.
+    /// Backend HTTP authentication is deliberately not an input: the SafeWorld Steam AppID plus this
+    /// installation's durable identity are sufficient to compose peer authority and transfer services.
     /// </summary>
     private void InitializeStewardPeerRuntime()
     {
@@ -21,7 +21,7 @@ public partial class MainWindow
         Closed -= MainWindow_PeerRuntimeClosed;
         Closed += MainWindow_PeerRuntimeClosed;
 
-        if (!StewardDesktopSteamConfiguration.TryLoad(
+        if (!SafeWorldDesktopSteamConfiguration.TryLoad(
                 out var configuration,
                 out var configurationProblem))
         {
@@ -37,9 +37,9 @@ public partial class MainWindow
         if (!_deviceSettingsUsableForRemote)
         {
             _peerRuntimeProblem =
-                "Steward could not establish a durable installation identity on this device.";
+                "SafeWorld could not establish a durable installation identity on this device.";
             StatusText.Text =
-                "Steam peer features are unavailable because this device has no durable Steward installation identity.";
+                "Steam peer features are unavailable because this device has no durable SafeWorld installation identity.";
             return;
         }
 

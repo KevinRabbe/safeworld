@@ -80,18 +80,23 @@ public partial class MainWindow
         }
 
         var world = _selectedWorld;
-        var isLocalCatalogRecord = world is not null && !_remoteWorldIds.Contains(world.Id);
-        _deleteWorldPanel.Visibility = isLocalCatalogRecord
+        var isPersistentPeerWorld = world?.PeerAuthority is not null;
+        var canOfferLocalRemoval = world is not null && !isPersistentPeerWorld;
+        _deleteWorldPanel.Visibility = canOfferLocalRemoval
             ? Visibility.Visible
             : Visibility.Collapsed;
 
-        if (!isLocalCatalogRecord || world is null)
+        if (!canOfferLocalRemoval || world is null)
         {
             _deleteWorldButton.IsEnabled = false;
             return;
         }
 
-        var incompleteSharedRecord = world.SharingMode == WorldSharingMode.Shared;
+        // Shared without peer authority is a pre-peer local record. Persistent peer Worlds are never
+        // deleted through this raw local-storage action; membership/leave owns that transition.
+        var incompleteSharedRecord =
+            world.SharingMode == WorldSharingMode.Shared &&
+            world.PeerAuthority is null;
         var responsibility = _responsibilityTracker.Current;
         var selectedOwnsResponsibility = responsibility.Kind != WorldLifecycleResponsibilityKind.None &&
                                          responsibility.WorldId == world.Id;
@@ -104,16 +109,16 @@ public partial class MainWindow
                 WorldLifecycleResponsibilityKind.CleanupPending;
 
         _deleteWorldButton.Content = incompleteSharedRecord
-            ? "Remove from Safe World"
+            ? "Remove from SafeWorld"
             : DesktopText.DeleteWorld;
         _deleteWorldDescription.Text = incompleteSharedRecord
             ? canAbandonDurableResponsibility
-                ? "Remove this incomplete shared World record from this PC and stop its unresolved local recovery responsibility. Uncommitted changes will not be recovered; uncertain legacy workspace files are preserved as abandoned evidence."
-                : "Remove this incomplete shared World record and its local revision history from this PC. This does not delete a shared World for other people."
+                ? "Remove this pre-peer shared World record from this PC and stop its unresolved local recovery responsibility. Uncommitted changes will not be recovered; uncertain workspace files are preserved as abandoned evidence."
+                : "Remove this pre-peer shared World record and its local revision history from this PC. This does not contact or modify any legacy service."
             : DesktopText.DeleteWorldDescription;
         AutomationProperties.SetName(
             _deleteWorldButton,
-            incompleteSharedRecord ? "Remove from Safe World" : DesktopText.DeleteWorld);
+            incompleteSharedRecord ? "Remove from SafeWorld" : DesktopText.DeleteWorld);
 
         _deleteWorldButton.IsEnabled =
             !_isBusy &&
@@ -122,10 +127,10 @@ public partial class MainWindow
         var help = selectedOwnsResponsibility && !canAbandonDurableResponsibility
             ? "Finish the active game session before removing this World."
             : canAbandonDurableResponsibility
-                ? "Abandon this incomplete World's unresolved local recovery evidence, remove its local catalog record, and unblock other Worlds."
+                ? "Abandon this pre-peer World's unresolved local recovery evidence, remove its local catalog record, and unblock other Worlds."
                 : incompleteSharedRecord
-                    ? "Remove the incomplete local shared-World record from this PC. This does not delete a connected shared World for other people."
-                    : "Delete Safe World's managed copy and revision history. The game's own save folder is not modified.";
+                    ? "Remove the pre-peer local shared-World record from this PC without contacting any legacy service."
+                    : "Delete SafeWorld's managed copy and revision history. The game's own save folder is not modified.";
         _deleteWorldButton.ToolTip = help;
         AutomationProperties.SetHelpText(_deleteWorldButton, help);
     }
@@ -133,8 +138,16 @@ public partial class MainWindow
     private async void DeleteWorldButton_Click(object sender, RoutedEventArgs e)
     {
         var world = _selectedWorld;
-        if (world is null || _remoteWorldIds.Contains(world.Id))
+        if (world is null)
         {
+            return;
+        }
+
+        if (world.PeerAuthority is not null)
+        {
+            StatusText.Text =
+                "Shared peer Worlds must be left through Manage access so SafeWorld can preserve membership and authority safety.";
+            UpdateWorldDeletionActionState();
             return;
         }
 
@@ -153,21 +166,21 @@ public partial class MainWindow
         if (selectedOwnsResponsibility && !canAbandonDurableResponsibility)
         {
             StatusText.Text =
-                "Finish this World's active game session before removing it from Safe World.";
+                "Finish this World's active game session before removing it from SafeWorld.";
             UpdateWorldDeletionActionState();
             return;
         }
 
         var actionTitle = incompleteSharedRecord
-            ? "Remove from Safe World"
+            ? "Remove from SafeWorld"
             : DesktopText.DeleteWorld;
         var consequence = incompleteSharedRecord
             ? canAbandonDurableResponsibility
-                ? "Safe World will stop treating this incomplete World's unresolved local recovery record as active, preserve uncertain workspace files as abandoned evidence, and remove the World and its local revision history from this PC. " +
-                  "Uncommitted gameplay changes will not be recoverable through Safe World. This does not delete a shared World for other people."
-                : "Safe World will remove this incomplete shared World record and its local revision history from this PC. " +
-                  "This does not delete a shared World for other people. If an incomplete backend record was already created, it may still require remote cleanup later."
-            : "Safe World's managed copy and its revision history will be deleted. " +
+                ? "SafeWorld will stop treating this pre-peer World's unresolved local recovery record as active, preserve uncertain workspace files as abandoned evidence, and remove the World and its local revision history from this PC. " +
+                  "Uncommitted gameplay changes will not be recoverable through SafeWorld. No legacy service is contacted or modified."
+                : "SafeWorld will remove this pre-peer shared World record and its local revision history from this PC. " +
+                  "No legacy service is contacted or modified."
+            : "SafeWorld's managed copy and its revision history will be deleted. " +
               "A save in the game's own save folder is not deleted.";
 
         var confirmation = MessageBox.Show(
@@ -200,16 +213,15 @@ public partial class MainWindow
                     if (!await _storage.DeleteWorldAsync(worldId))
                     {
                         throw new InvalidOperationException(
-                            $"World '{worldName}' is no longer present in Safe World's local managed storage.");
+                            $"World '{worldName}' is no longer present in SafeWorld's local managed storage.");
                     }
 
-                    _remoteIncompleteWorldIds.Remove(worldId);
                     _selectedWorld = null;
                     WorldList.SelectedItem = null;
                     await RefreshUnifiedWorldsAsync(preserveStatus: true);
                     StatusText.Text = incompleteSharedRecord
-                        ? $"Removed incomplete shared World '{worldName}' from this PC. Other Worlds are no longer blocked by it."
-                        : $"Deleted '{worldName}' from Safe World.";
+                        ? $"Removed pre-peer shared World '{worldName}' from this PC. Other Worlds are no longer blocked by it."
+                        : $"Deleted '{worldName}' from SafeWorld.";
                 }
                 finally
                 {
@@ -235,7 +247,7 @@ public partial class MainWindow
         if (records.Length == 0)
         {
             throw new InvalidOperationException(
-                $"Safe World could not find the durable recovery evidence that currently blocks '{worldName}'.");
+                $"SafeWorld could not find the durable recovery evidence that currently blocks '{worldName}'.");
         }
 
         var now = DateTimeOffset.UtcNow;
@@ -246,7 +258,7 @@ public partial class MainWindow
                 Status = WorkspaceRecoveryStatus.Abandoned,
                 UpdatedAt = now,
                 Reason =
-                    $"The user removed incomplete local shared World '{worldName}'. Safe World preserved " +
+                    $"The user removed pre-peer local shared World '{worldName}'. SafeWorld preserved " +
                     "the uncertain workspace as abandoned evidence instead of guessing how to clean it. " +
                     "This record no longer owns runtime responsibility."
             });

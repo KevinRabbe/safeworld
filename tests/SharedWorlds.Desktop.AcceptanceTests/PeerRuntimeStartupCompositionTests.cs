@@ -5,26 +5,29 @@ namespace SharedWorlds.Desktop.AcceptanceTests;
 public sealed class PeerRuntimeStartupCompositionTests
 {
     [Fact]
-    public void PeerRuntimeStartsAfterDurableDeviceIdentityAndBeforeRemoteSession()
+    public void PeerRuntimeStartsAfterDurableDeviceIdentityWithoutRemoteSession()
     {
         var source = Read("src/SharedWorlds.Desktop/MainWindow.UnifiedStartup.cs");
         var deviceSettings = RequiredIndex(source, "await LoadDeviceSettingsAsync();");
         var peerRuntime = RequiredIndex(source, "InitializeStewardPeerRuntime();", deviceSettings);
-        var remoteSession = RequiredIndex(source, "await InitializeStewardRemoteSessionAsync();", peerRuntime);
+        var gameUi = RequiredIndex(source, "await InitializeUnifiedGameUiAsync();", peerRuntime);
 
         Assert.True(deviceSettings < peerRuntime);
-        Assert.True(peerRuntime < remoteSession);
+        Assert.True(peerRuntime < gameUi);
+        Assert.DoesNotContain("InitializeStewardRemoteSessionAsync", source, StringComparison.Ordinal);
+        Assert.DoesNotContain("_remoteRuntime", source, StringComparison.Ordinal);
     }
 
     [Fact]
-    public void PeerStartupLoadsIndependentSteamConfigurationAndOneAppOwnedRuntime()
+    public void PeerStartupLoadsSafeWorldSteamConfigurationAndOneAppOwnedRuntime()
     {
         var source = Read("src/SharedWorlds.Desktop/MainWindow.PeerRuntime.cs");
 
-        Assert.Contains("StewardDesktopSteamConfiguration.TryLoad(", source, StringComparison.Ordinal);
+        Assert.Contains("SafeWorldDesktopSteamConfiguration.TryLoad(", source, StringComparison.Ordinal);
         Assert.Contains("app.TryGetOrCreateSteamPlatformRuntime(", source, StringComparison.Ordinal);
         Assert.Contains("configuration!.AppId", source, StringComparison.Ordinal);
         Assert.Contains("StewardDesktopPeerRuntime.Create(", source, StringComparison.Ordinal);
+        Assert.DoesNotContain("StewardDesktopSteamConfiguration.TryLoad(", source, StringComparison.Ordinal);
         Assert.DoesNotContain("StewardDesktopRemoteConfiguration", source, StringComparison.Ordinal);
         Assert.DoesNotContain("InitializeStewardRemoteSessionAsync", source, StringComparison.Ordinal);
         Assert.DoesNotContain("HttpClient", source, StringComparison.Ordinal);
@@ -75,12 +78,68 @@ public sealed class PeerRuntimeStartupCompositionTests
     public void MissingPeerConfigurationDoesNotPreventLocalStartup()
     {
         var source = Read("src/SharedWorlds.Desktop/MainWindow.PeerRuntime.cs");
-        var configurationLoad = RequiredIndex(source, "if (!StewardDesktopSteamConfiguration.TryLoad(");
+        var configurationLoad = RequiredIndex(source, "if (!SafeWorldDesktopSteamConfiguration.TryLoad(");
         var firstReturn = RequiredIndex(source, "return;", configurationLoad);
         var peerCreation = RequiredIndex(source, "_peerRuntime = StewardDesktopPeerRuntime.Create(", firstReturn);
 
         Assert.True(configurationLoad < firstReturn);
         Assert.True(firstReturn < peerCreation);
+    }
+
+    [Fact]
+    public void LocalPlayRemainsDistributionNeutralWhileSharedPlayRequiresPeerAuthority()
+    {
+        var routing = Read("src/SharedWorlds.Desktop/MainWindow.WorldRouting.cs");
+        var localOnlyGate = RequiredIndex(
+            routing,
+            "if (world.SharingMode == WorldSharingMode.LocalOnly)");
+        var localAuthority = RequiredIndex(routing, "return true;", localOnlyGate);
+        var peerAuthority = RequiredIndex(
+            routing,
+            "return _peerWorldIds.Contains(world.Id) && _peerRuntime is not null;",
+            localAuthority);
+
+        Assert.True(localOnlyGate < localAuthority);
+        Assert.True(localAuthority < peerAuthority);
+
+        var readiness = Read("src/SharedWorlds.Desktop/MainWindow.EnvironmentReadiness.cs");
+        var readinessStart = RequiredIndex(
+            readiness,
+            "private bool IsSelectedWorldEnvironmentReadyForPlay()");
+        var readinessEnd = RequiredIndex(
+            readiness,
+            "private EnvironmentVerificationReport? GetEnvironmentVerificationFor",
+            readinessStart);
+        var readinessBody = readiness[readinessStart..readinessEnd];
+
+        Assert.Contains("HasAuthoritativeRuntimeForWorld(world)", readinessBody, StringComparison.Ordinal);
+        Assert.Contains(
+            "world.SharingMode == WorldSharingMode.LocalOnly",
+            readinessBody,
+            StringComparison.Ordinal);
+
+        var games = Read("src/SharedWorlds.Desktop/MainWindow.UnifiedGames.cs");
+        var continueStart = RequiredIndex(games, "private async void UnifiedContinueButton_Click");
+        var hostStart = RequiredIndex(games, "private async void UnifiedHostButton_Click", continueStart);
+        var refreshStart = RequiredIndex(games, "private async Task RefreshUnifiedWorldsAsync", hostStart);
+        var actionStateStart = RequiredIndex(games, "private void UpdateUnifiedActionState()");
+        var actionStateEnd = RequiredIndex(
+            games,
+            "private void UpdateUnifiedImportActionState()",
+            actionStateStart);
+
+        Assert.Contains(
+            "if (!IsSelectedWorldEnvironmentReadyForPlay())",
+            games[continueStart..hostStart],
+            StringComparison.Ordinal);
+        Assert.Contains(
+            "if (!IsSelectedWorldEnvironmentReadyForPlay())",
+            games[hostStart..refreshStart],
+            StringComparison.Ordinal);
+        Assert.Contains(
+            "var environmentReady = IsSelectedWorldEnvironmentReadyForPlay();",
+            games[actionStateStart..actionStateEnd],
+            StringComparison.Ordinal);
     }
 
     private static string Read(string relativePath)

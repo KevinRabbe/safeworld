@@ -55,7 +55,6 @@ public partial class MainWindow
         var world = _selectedWorld;
         var isSupportedLocalWorld = world is not null &&
                                     world.SharingMode == WorldSharingMode.LocalOnly &&
-                                    !_remoteWorldIds.Contains(world.Id) &&
                                     world.CurrentStateRevisionId is not null;
         _historyButton.Visibility = isSupportedLocalWorld
             ? Visibility.Visible
@@ -77,7 +76,6 @@ public partial class MainWindow
         var world = _selectedWorld;
         if (world is null ||
             world.SharingMode != WorldSharingMode.LocalOnly ||
-            _remoteWorldIds.Contains(world.Id) ||
             world.CurrentStateRevisionId is not { } currentRevisionId ||
             _responsibilityTracker.Current.Kind != WorldLifecycleResponsibilityKind.None)
         {

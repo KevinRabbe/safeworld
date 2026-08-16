@@ -128,7 +128,7 @@ public partial class MainWindow
 
         if (!adapter.Capabilities.HasFlag(GameAdapterCapabilities.AutomaticLocalLaunch))
         {
-            StatusText.Text = $"{adapter.DisplayName} does not support Steward-managed local launch yet.";
+            StatusText.Text = $"{adapter.DisplayName} does not support SafeWorld-managed local launch yet.";
             return;
         }
 
@@ -172,7 +172,7 @@ public partial class MainWindow
 
         if (!adapter.Capabilities.HasFlag(GameAdapterCapabilities.AutomaticHostLaunch))
         {
-            StatusText.Text = $"{adapter.DisplayName} does not support Steward-managed hosting yet.";
+            StatusText.Text = $"{adapter.DisplayName} does not support SafeWorld-managed hosting yet.";
             return;
         }
 
@@ -189,15 +189,12 @@ public partial class MainWindow
             {
                 var installation = await GetGameInstallationAsync(adapter);
                 StatusText.Text =
-                    $"{adapter.DisplayName} is running. When the hosted session ends, Steward will save the updated World.";
+                    $"{adapter.DisplayName} is running. When the hosted session ends, SafeWorld will save the updated World.";
                 var lifecycle = GetLifecycleForWorld(world);
                 var managedHostAdapter = GetManagedHostAdapterForWorld(world, adapter);
-                var hostAdapter = _remoteWorldIds.Contains(world.Id) && _remoteRuntime is { } remoteRuntime
-                    ? remoteRuntime.CoordinateManagedHost(world.Id, managedHostAdapter)
-                    : managedHostAdapter;
                 var updated = await lifecycle.ContinueAsHostAsync(
                     world.Id,
-                    hostAdapter,
+                    managedHostAdapter,
                     installation,
                     GetUserForWorld(world));
                 StatusText.Text = $"Hosted session finished. Saved '{updated.Name}'.";
@@ -273,23 +270,16 @@ public partial class MainWindow
 
             if (!preserveStatus)
             {
-                if (_lastRemoteWorldLoadError is not null)
+                var managedGameCount = ordered
+                    .Select(item => item.AdapterId)
+                    .Distinct(StringComparer.Ordinal)
+                    .Count();
+                StatusText.Text = ordered.Count switch
                 {
-                    StatusText.Text = "Local Worlds loaded. Shared Worlds are temporarily unavailable.";
-                }
-                else
-                {
-                    var managedGameCount = ordered
-                        .Select(item => item.AdapterId)
-                        .Distinct(StringComparer.Ordinal)
-                        .Count();
-                    StatusText.Text = ordered.Count switch
-                    {
-                        0 => $"{_registeredGameAdapters.Count} supported games • no managed Worlds yet",
-                        1 => "1 managed World",
-                        _ => $"{ordered.Count} managed Worlds across {managedGameCount} games"
-                    };
-                }
+                    0 => $"{_registeredGameAdapters.Count} supported games • no managed Worlds yet",
+                    1 => "1 managed World",
+                    _ => $"{ordered.Count} managed Worlds across {managedGameCount} games"
+                };
             }
         }
         catch (Exception exception)
@@ -406,9 +396,8 @@ public partial class MainWindow
         }
         else if (WorldList.Items.Count == 0)
         {
-            EmptyStateText.Text = _lastRemoteWorldLoadError is null
-                ? $"No managed {SelectedGameNameText.Text} Worlds yet. Return to Games to Import one."
-                : $"No local {SelectedGameNameText.Text} Worlds are managed on this PC. Shared Worlds are temporarily unavailable.";
+            EmptyStateText.Text =
+                $"No managed {SelectedGameNameText.Text} Worlds yet. Return to Games to Import one.";
         }
         else
         {

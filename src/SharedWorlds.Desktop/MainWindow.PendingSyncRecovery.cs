@@ -18,7 +18,7 @@ public partial class MainWindow
         if (world.SharingMode == WorldSharingMode.Shared && !HasAuthoritativeRuntimeForWorld(world))
         {
             StatusText.Text =
-                "Reconnect authenticated Steward authority before retrying recovery for this shared World.";
+                "This shared World has no usable peer authority on this launch. Start SafeWorld with Steam available before retrying recovery.";
             return;
         }
 
@@ -54,28 +54,32 @@ public partial class MainWindow
             .ThenBy(candidate => candidate.Id.ToString(), StringComparer.Ordinal)
             .FirstOrDefault()
             ?? throw new InvalidOperationException(
-                "This responsibility is not a pending recovery. Steward left its evidence untouched for the appropriate recovery path.");
+                "This responsibility is not a pending recovery. SafeWorld left its evidence untouched for the appropriate recovery path.");
 
         var installation = knownInstallation ?? await GetReadyInstallationForRecoveryRecordAsync(
             world,
             adapter,
             record);
-        if (_remoteWorldIds.Contains(world.Id))
+
+        if (_peerWorldIds.Contains(world.Id))
         {
-            var remote = _remoteRuntime
-                ?? throw new InvalidOperationException(
-                    "The authenticated Steward runtime disappeared before shared recovery could start.");
-            return await remote.PendingSyncRecovery.RetryAsync(
+            var peer = RequirePeerRuntime(world);
+            var peerRecovery = new LocalPendingWorkspaceRecoveryService(
+                peer.Storage,
+                peer.SessionCoordinator,
+                _workspaceRecoveryStore,
+                _localManagedSessionGate);
+            return await peerRecovery.RetryAsync(
                 world.Id,
                 adapter,
                 installation,
-                remote.User);
+                peer.User);
         }
 
         if (world.SharingMode == WorldSharingMode.Shared)
         {
             throw new InvalidOperationException(
-                "A shared World can never use local recovery authority. Reconnect Steward first.");
+                "A shared World can never use local recovery authority. Its canonical peer authority must be available before recovery can continue.");
         }
 
         var localRecovery = new LocalPendingWorkspaceRecoveryService(

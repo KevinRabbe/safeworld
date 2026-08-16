@@ -5,13 +5,14 @@ namespace SharedWorlds.Desktop.AcceptanceTests;
 public sealed class PeerProductCiCompositionTests
 {
     [Fact]
-    public void PeerSolutionBoundaryContainsProductProjectsButNoLegacyBackendOrWindowsAcceptanceSuite()
+    public void PeerSolutionBoundaryContainsProductAndArchitectureProjectsButNoLegacyBackendOrWindowsAcceptanceSuite()
     {
         var source = ReadRepositoryFile("SharedWorlds.PeerProduct.slnf");
 
         Assert.Contains("SharedWorlds.Core", source, StringComparison.Ordinal);
         Assert.Contains("SharedWorlds.Infrastructure", source, StringComparison.Ordinal);
         Assert.Contains("SharedWorlds.Desktop", source, StringComparison.Ordinal);
+        Assert.Contains("SharedWorlds.Architecture.Tests", source, StringComparison.Ordinal);
         Assert.Contains("SharedWorlds.Core.Tests", source, StringComparison.Ordinal);
         Assert.Contains("SharedWorlds.Infrastructure.Tests", source, StringComparison.Ordinal);
         Assert.DoesNotContain("SharedWorlds.Desktop.AcceptanceTests", source, StringComparison.Ordinal);
@@ -19,12 +20,16 @@ public sealed class PeerProductCiCompositionTests
     }
 
     [Fact]
-    public void DefaultCiUsesPeerBoundaryAndDoesNotDuplicateDesktopAcceptanceOrProvisionBackendInfrastructure()
+    public void DefaultCiUsesPeerBoundaryAndEnforcesArchitectureWithoutProvisioningBackendInfrastructure()
     {
         var source = ReadRepositoryFile(".github/workflows/ci.yml");
 
         Assert.Contains("name: Peer product CI", source, StringComparison.Ordinal);
         Assert.Contains("SharedWorlds.PeerProduct.slnf", source, StringComparison.Ordinal);
+        Assert.Contains(
+            "tests/SharedWorlds.Architecture.Tests/SharedWorlds.Architecture.Tests.csproj",
+            source,
+            StringComparison.Ordinal);
         Assert.DoesNotContain("tests/SharedWorlds.Desktop.AcceptanceTests", source, StringComparison.Ordinal);
         Assert.DoesNotContain("SharedWorlds.Backend", source, StringComparison.Ordinal);
         Assert.DoesNotContain("postgres:", source, StringComparison.Ordinal);
@@ -68,18 +73,9 @@ public sealed class PeerProductCiCompositionTests
     }
 
     [Fact]
-    public void LegacyBackendQualificationIsSeparateAndPathScoped()
+    public void LegacyBackendQualificationWorkflowIsNotPartOfSafeWorld()
     {
-        var source = ReadRepositoryFile(".github/workflows/legacy-backend-ci.yml");
-
-        Assert.Contains("name: Legacy backend CI", source, StringComparison.Ordinal);
-        Assert.Contains("workflow_dispatch:", source, StringComparison.Ordinal);
-        Assert.Contains("pull_request:", source, StringComparison.Ordinal);
-        Assert.Contains("paths:", source, StringComparison.Ordinal);
-        Assert.Contains("src/SharedWorlds.Backend.Api/**", source, StringComparison.Ordinal);
-        Assert.Contains("Legacy PostgreSQL integration", source, StringComparison.Ordinal);
-        Assert.Contains("Legacy S3-compatible integration", source, StringComparison.Ordinal);
-        Assert.Contains("Legacy backend container", source, StringComparison.Ordinal);
+        Assert.False(File.Exists(FindRepositoryFile(".github/workflows/legacy-backend-ci.yml")));
     }
 
     [Fact]

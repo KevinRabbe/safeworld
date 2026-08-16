@@ -38,6 +38,31 @@ public sealed class SingleProductCompositionSourceAuditTests
         Assert.Contains("SharedWorlds.Cli.Retired", project, StringComparison.Ordinal);
     }
 
+    [Fact]
+    public void ProductRepositoryDoesNotContainLegacyRemoteSourcesAndDesktopCannotReferenceLegacyAssembly()
+    {
+        var repositoryRoot = FindRepositoryRoot();
+        var remoteSourceDirectory = Path.Combine(
+            repositoryRoot,
+            "src",
+            "SharedWorlds.Infrastructure",
+            "Remote");
+        var legacyProjectDirectory = Path.Combine(
+            repositoryRoot,
+            "src",
+            "SharedWorlds.LegacyRemote");
+        var desktopProject = File.ReadAllText(Path.Combine(
+            repositoryRoot,
+            "src",
+            "SharedWorlds.Desktop",
+            "SharedWorlds.Desktop.csproj"));
+
+        Assert.False(Directory.Exists(remoteSourceDirectory));
+        Assert.False(Directory.Exists(legacyProjectDirectory));
+        Assert.DoesNotContain("SharedWorlds.LegacyRemote", desktopProject, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain("SharedWorlds.Infrastructure/Remote", desktopProject, StringComparison.OrdinalIgnoreCase);
+    }
+
     private static string FindRepositoryRoot()
     {
         var current = new DirectoryInfo(AppContext.BaseDirectory);

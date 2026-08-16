@@ -17,10 +17,12 @@ public sealed class WorldHistoryPresentationTests
         Assert.Contains("InitializeWorldHistoryUi();", startup, StringComparison.Ordinal);
         Assert.Contains("Content = DesktopText.History", history, StringComparison.Ordinal);
         Assert.Contains("world.SharingMode == WorldSharingMode.LocalOnly", history, StringComparison.Ordinal);
-        Assert.Contains("!_remoteWorldIds.Contains(world.Id)", history, StringComparison.Ordinal);
+        Assert.Contains("world.CurrentStateRevisionId is not null", history, StringComparison.Ordinal);
         Assert.Contains("WorldLifecycleResponsibilityKind.None", history, StringComparison.Ordinal);
         Assert.Contains("UpdateWorldHistoryActionState();", busy, StringComparison.Ordinal);
+        Assert.DoesNotContain("_remoteWorldIds", history, StringComparison.Ordinal);
         Assert.DoesNotContain("_remoteRuntime", history, StringComparison.Ordinal);
+        Assert.DoesNotContain("SharedWorlds.Infrastructure.Remote", history, StringComparison.Ordinal);
     }
 
     [Fact]

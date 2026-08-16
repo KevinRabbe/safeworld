@@ -66,7 +66,7 @@ finally {
     $uninstallKey.Dispose()
 }
 
-$worldDataRoot = Join-Path $env:LOCALAPPDATA 'SharedWorlds'
+$worldDataRoot = Join-Path $env:LOCALAPPDATA 'SafeWorld'
 [IO.Directory]::CreateDirectory($worldDataRoot) | Out-Null
 $worldSentinel = Join-Path $worldDataRoot 'installer-preserves-world-data.txt'
 [IO.File]::WriteAllText($worldSentinel, 'preserve')
@@ -97,6 +97,6 @@ if (-not [IO.File]::Exists($worldSentinel)) {
     throw 'SafeWorld uninstall removed external World data.'
 }
 
-Write-Host '[OK] SafeWorld installer lifecycle verified.'
+Write-Host '[OK] SafeWorld Steam-enabled installer lifecycle verified.'
 Write-Host "  Install root: $installRoot"
-Write-Host '  Legacy package migration, install/uninstall integration, and data preservation verified.'
+Write-Host '  Legacy package migration, install/uninstall integration, and SafeWorld data preservation verified.'

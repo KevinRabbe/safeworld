@@ -1,6 +1,5 @@
 [CmdletBinding()]
 param(
-    [Parameter(Mandatory = $true)]
     [uint32]$SteamAppId,
     [string]$Version = '0.1.0-beta.1',
     [Parameter(Mandatory = $true)]
@@ -11,8 +10,9 @@ param(
 Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
 
-if ($SteamAppId -eq 0) { throw 'SteamAppId must be positive.' }
-if ($SteamAppId -eq 480) { throw 'AppID 480 is development-only and cannot build a SafeWorld public beta.' }
+$steamEnabled = $PSBoundParameters.ContainsKey('SteamAppId')
+if ($steamEnabled -and $SteamAppId -eq 0) { throw 'SteamAppId must be positive when supplied.' }
+if ($steamEnabled -and $SteamAppId -eq 480) { throw 'AppID 480 is development-only and cannot build a SafeWorld public beta.' }
 if ([string]::IsNullOrWhiteSpace($Version) -or $Version -notmatch '^[0-9A-Za-z][0-9A-Za-z.-]*$') {
     throw 'Version must use letters, digits, dots, and hyphens.'
 }
@@ -55,11 +55,17 @@ if ([IO.File]::Exists((Join-Path $product 'steam_appid.txt'))) {
     throw 'Public beta product must not contain steam_appid.txt.'
 }
 
-$steamConfiguration = [ordered]@{ schemaVersion = 1; steamAppId = $SteamAppId }
-[IO.File]::WriteAllText(
-    (Join-Path $product 'safeworld-steam.json'),
-    ($steamConfiguration | ConvertTo-Json -Compress),
-    [Text.UTF8Encoding]::new($false))
+$manifestSteamAppId = $null
+$steamConfigurationFileName = $null
+if ($steamEnabled) {
+    $manifestSteamAppId = $SteamAppId
+    $steamConfigurationFileName = 'safeworld-steam.json'
+    $steamConfiguration = [ordered]@{ schemaVersion = 1; steamAppId = $SteamAppId }
+    [IO.File]::WriteAllText(
+        (Join-Path $product $steamConfigurationFileName),
+        ($steamConfiguration | ConvertTo-Json -Compress),
+        [Text.UTF8Encoding]::new($false))
+}
 if ([IO.File]::Exists((Join-Path $product 'steward-steam.json'))) {
     throw 'Public beta product must not contain the legacy Steam configuration filename.'
 }
@@ -78,9 +84,9 @@ $manifest = [ordered]@{
     sourceCommitSha = $commit
     version = $Version
     runtime = 'win-x64'
-    steamAppId = $SteamAppId
+    steamAppId = $manifestSteamAppId
     executable = 'SafeWorld.Desktop.exe'
-    steamConfiguration = 'safeworld-steam.json'
+    steamConfiguration = $steamConfigurationFileName
     files = $productFiles
 }
 [IO.File]::WriteAllText(

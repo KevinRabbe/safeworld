@@ -5,9 +5,9 @@ namespace SharedWorlds.Desktop.AcceptanceTests;
 public sealed class PeerHostCutoverCompositionTests
 {
     [Fact]
-    public void LocalPersistentPeerWorldsAreClassifiedBeforeRemoteWorldMerge()
+    public void LocalPersistentPeerWorldsAreClassifiedFromCanonicalLocalCatalog()
     {
-        var source = Read("src/SharedWorlds.Desktop/MainWindow.RemoteRuntime.cs");
+        var source = Read("src/SharedWorlds.Desktop/MainWindow.WorldRouting.cs");
         var localLoad = RequiredIndex(source, "var localWorlds = await _storage.ListWorldsAsync(cancellationToken);");
         var peerClear = RequiredIndex(source, "_peerWorldIds.Clear();", localLoad);
         var peerCondition = RequiredIndex(
@@ -15,65 +15,52 @@ public sealed class PeerHostCutoverCompositionTests
             "localWorld.SharingMode == WorldSharingMode.Shared &&\n                localWorld.PeerAuthority is not null",
             peerClear);
         var peerAdd = RequiredIndex(source, "_peerWorldIds.Add(localWorld.Id);", peerCondition);
-        var remoteLoad = RequiredIndex(source, "remoteWorlds = await remote.Storage.ListWorldsAsync", peerAdd);
+        var result = RequiredIndex(source, "return localWorlds;", peerAdd);
 
         Assert.True(localLoad < peerClear);
         Assert.True(peerClear < peerCondition);
         Assert.True(peerCondition < peerAdd);
-        Assert.True(peerAdd < remoteLoad);
+        Assert.True(peerAdd < result);
+        Assert.DoesNotContain("_remoteRuntime", source, StringComparison.Ordinal);
+        Assert.DoesNotContain("_remoteWorldIds", source, StringComparison.Ordinal);
     }
 
     [Fact]
-    public void SameIdLegacyRemoteCopyCannotHideLocalPeerAuthorityWorld()
+    public void PeerWorldStorageLifecycleAndIdentityNeverResolveThroughLegacyRuntime()
     {
-        var source = Read("src/SharedWorlds.Desktop/MainWindow.RemoteRuntime.cs");
-        var remoteLoop = RequiredIndex(source, "foreach (var remoteWorld in remoteWorlds)");
-        var peerGuard = RequiredIndex(
-            source,
-            "if (_peerWorldIds.Contains(remoteWorld.Id))",
-            remoteLoop);
-        var guardContinue = RequiredIndex(source, "continue;", peerGuard);
-        var remoteAdd = RequiredIndex(source, "_remoteWorldIds.Add(remoteWorld.Id);", guardContinue);
+        var source = Read("src/SharedWorlds.Desktop/MainWindow.WorldRouting.cs");
 
-        Assert.True(remoteLoop < peerGuard);
-        Assert.True(peerGuard < guardContinue);
-        Assert.True(guardContinue < remoteAdd);
+        Assert.Contains("RequirePeerRuntime(world).Storage", source, StringComparison.Ordinal);
+        Assert.Contains("RequirePeerRuntime(world).Lifecycle", source, StringComparison.Ordinal);
+        Assert.Contains("RequirePeerRuntime(world).User", source, StringComparison.Ordinal);
+        Assert.DoesNotContain("StewardDesktopRemoteRuntime", source, StringComparison.Ordinal);
+        Assert.DoesNotContain("_remoteRuntime", source, StringComparison.Ordinal);
     }
 
     [Fact]
-    public void PeerWorldStorageLifecycleAndIdentityResolveBeforeLegacyRemoteRuntime()
+    public void PeerWorldAuthorityAvailabilityDependsOnlyOnEmbeddedRuntime()
     {
-        var source = Read("src/SharedWorlds.Desktop/MainWindow.RemoteRuntime.cs");
-
-        AssertPeerFirst(source, "private IWorldStorage GetStorageForWorld(World world)", "RequirePeerRuntime(world).Storage");
-        AssertPeerFirst(source, "private WorldLifecycleService GetLifecycleForWorld(World world)", "RequirePeerRuntime(world).Lifecycle");
-        AssertPeerFirst(source, "private UserIdentity GetUserForWorld(World world)", "RequirePeerRuntime(world).User");
-    }
-
-    [Fact]
-    public void PeerWorldAuthorityAvailabilityDependsOnEmbeddedRuntimeNotBackendRuntime()
-    {
-        var source = Read("src/SharedWorlds.Desktop/MainWindow.RemoteRuntime.cs");
+        var source = Read("src/SharedWorlds.Desktop/MainWindow.WorldRouting.cs");
         var method = RequiredIndex(source, "private bool HasAuthoritativeRuntimeForWorld(World world)");
-        var peerCheck = RequiredIndex(source, "if (_peerWorldIds.Contains(world.Id))", method);
-        var peerReturn = RequiredIndex(source, "return _peerRuntime is not null;", peerCheck);
-        var remoteReturn = RequiredIndex(
+        var local = RequiredIndex(source, "world.SharingMode == WorldSharingMode.LocalOnly", method);
+        var peer = RequiredIndex(
             source,
-            "return _remoteRuntime is not null && _remoteWorldIds.Contains(world.Id);",
-            peerReturn);
+            "return _peerWorldIds.Contains(world.Id) && _peerRuntime is not null;",
+            local);
 
-        Assert.True(peerCheck < peerReturn);
-        Assert.True(peerReturn < remoteReturn);
+        Assert.True(method < local);
+        Assert.True(local < peer);
+        Assert.DoesNotContain("_remoteRuntime", source[method..], StringComparison.Ordinal);
     }
 
     [Fact]
     public void MissingPeerRuntimeFailsClosedInsteadOfFallingBackToWritableLocalLifecycle()
     {
-        var source = Read("src/SharedWorlds.Desktop/MainWindow.RemoteRuntime.cs");
+        var source = Read("src/SharedWorlds.Desktop/MainWindow.WorldRouting.cs");
 
         Assert.Contains("private StewardDesktopPeerRuntime RequirePeerRuntime(World world)", source, StringComparison.Ordinal);
         Assert.Contains("uses persistent peer authority, but the embedded Steam peer runtime is unavailable", source, StringComparison.Ordinal);
-        Assert.Contains("A shared World can never fall back to unfenced local writable authority", source, StringComparison.Ordinal);
+        Assert.Contains("predates SafeWorld peer authority and cannot be opened writable", source, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -96,38 +83,9 @@ public sealed class PeerHostCutoverCompositionTests
     }
 
     [Fact]
-    public void UnifiedHostActionWrapsPeerBeforeOptionalLegacyRemotePresenceAndLaunch()
+    public void ManagedHostWrapperIsAppliedOnlyToPersistentPeerWorldClassification()
     {
-        var source = Read("src/SharedWorlds.Desktop/MainWindow.UnifiedGames.cs");
-        var hostHandler = RequiredIndex(source, "private async void UnifiedHostButton_Click(");
-        var lifecycle = RequiredIndex(source, "var lifecycle = GetLifecycleForWorld(world);", hostHandler);
-        var peerWrapper = RequiredIndex(
-            source,
-            "var managedHostAdapter = GetManagedHostAdapterForWorld(world, adapter);",
-            lifecycle);
-        var legacyCondition = RequiredIndex(
-            source,
-            "_remoteWorldIds.Contains(world.Id) && _remoteRuntime is { } remoteRuntime",
-            peerWrapper);
-        var legacyWrapper = RequiredIndex(
-            source,
-            "remoteRuntime.CoordinateManagedHost(world.Id, managedHostAdapter)",
-            legacyCondition);
-        var launch = RequiredIndex(source, "var updated = await lifecycle.ContinueAsHostAsync(", legacyWrapper);
-        var hostArgument = RequiredIndex(source, "hostAdapter,", launch);
-
-        Assert.True(hostHandler < lifecycle);
-        Assert.True(lifecycle < peerWrapper);
-        Assert.True(peerWrapper < legacyCondition);
-        Assert.True(legacyCondition < legacyWrapper);
-        Assert.True(legacyWrapper < launch);
-        Assert.True(launch < hostArgument);
-    }
-
-    [Fact]
-    public void ManagedHostWrapperIsAppliedOnlyToLocalPeerWorldClassification()
-    {
-        var source = Read("src/SharedWorlds.Desktop/MainWindow.RemoteRuntime.cs");
+        var source = Read("src/SharedWorlds.Desktop/MainWindow.WorldRouting.cs");
         var method = RequiredIndex(source, "private IGameAdapter GetManagedHostAdapterForWorld(");
         var peerClassification = RequiredIndex(source, "_peerWorldIds.Contains(world.Id)", method);
         var peerWrapper = RequiredIndex(
@@ -138,24 +96,7 @@ public sealed class PeerHostCutoverCompositionTests
 
         Assert.True(peerClassification < peerWrapper);
         Assert.True(peerWrapper < fallback);
-        Assert.DoesNotContain(
-            "_remoteRuntime?.CoordinateManagedHost",
-            source[method..],
-            StringComparison.Ordinal);
-    }
-
-    private static void AssertPeerFirst(
-        string source,
-        string methodSignature,
-        string peerResolution)
-    {
-        var method = RequiredIndex(source, methodSignature);
-        var peerCheck = RequiredIndex(source, "if (_peerWorldIds.Contains(world.Id))", method);
-        var peerValue = RequiredIndex(source, peerResolution, peerCheck);
-        var remoteCheck = RequiredIndex(source, "if (_remoteWorldIds.Contains(world.Id))", peerValue);
-
-        Assert.True(peerCheck < peerValue);
-        Assert.True(peerValue < remoteCheck);
+        Assert.DoesNotContain("_remoteRuntime", source[method..], StringComparison.Ordinal);
     }
 
     private static string Read(string relativePath)

@@ -5,21 +5,23 @@ namespace SharedWorlds.Desktop.AcceptanceTests;
 public sealed class PeerWorldJoinCutoverCompositionTests
 {
     [Fact]
-    public void ExistingJoinButtonRoutesLocalPeerWorldsBeforeLegacyRemotePresence()
+    public void ExistingJoinButtonRoutesOnlyCanonicalPeerWorlds()
     {
         var source = ReadJoin();
         var handler = RequiredIndex(source, "private async void WorldJoinButton_Click(");
-        var peerBranch = RequiredIndex(source, "if (_peerWorldIds.Contains(world.Id))", handler);
-        var peerJoin = RequiredIndex(source, "await JoinPeerWorldAsync(world, peerAdapter);", peerBranch);
-        var remoteRuntime = RequiredIndex(source, "var runtime = _remoteRuntime;", peerJoin);
+        var peerGuard = RequiredIndex(source, "if (!_peerWorldIds.Contains(world.Id)", handler);
+        var peerJoin = RequiredIndex(source, "await JoinPeerWorldAsync(world, adapter);", peerGuard);
 
-        Assert.True(handler < peerBranch);
-        Assert.True(peerBranch < peerJoin);
-        Assert.True(peerJoin < remoteRuntime);
+        Assert.True(handler < peerGuard);
+        Assert.True(peerGuard < peerJoin);
+        Assert.DoesNotContain("_remoteRuntime", source, StringComparison.Ordinal);
+        Assert.DoesNotContain("_remoteWorldIds", source, StringComparison.Ordinal);
+        Assert.DoesNotContain("StewardRemoteHostPresence", source, StringComparison.Ordinal);
+        Assert.DoesNotContain("GetHostPresenceAsync", source, StringComparison.Ordinal);
     }
 
     [Fact]
-    public void ExplicitSteamInviteAttachesLobbyThenRequestsBootstrapOrCatchUp()
+    public void ExplicitSteamInviteAttachesLobbyThenRequestsCatchUp()
     {
         var source = ReadJoin();
         var subscription = RequiredIndex(
@@ -89,17 +91,15 @@ public sealed class PeerWorldJoinCutoverCompositionTests
     public void PeerReadinessUsesAttachedSteamLobbyRatherThanBackendHostPresence()
     {
         var source = ReadJoin();
-        var peerBranch = RequiredIndex(
-            source,
-            "if (_peerWorldIds.Contains(world.Id))",
-            RequiredIndex(source, "private async Task RefreshSelectedWorldHostPresenceAsync()"));
-        var peerEnd = RequiredIndex(source, "var runtime = _remoteRuntime;", peerBranch);
-        var peerSection = source[peerBranch..peerEnd];
+        var refresh = RequiredIndex(source, "private async Task RefreshSelectedWorldHostPresenceAsync()");
+        var lobby = RequiredIndex(source, "snapshot = await peerRuntime.Lobby.GetAsync(world.Id);", refresh);
+        var update = RequiredIndex(source, "UpdateWorldJoinActionState();", lobby);
 
-        Assert.Contains("peerRuntime.Lobby.GetAsync(world.Id)", peerSection, StringComparison.Ordinal);
-        Assert.DoesNotContain("GetHostPresenceAsync", peerSection, StringComparison.Ordinal);
-        Assert.DoesNotContain("StewardRemoteHostPresence", peerSection, StringComparison.Ordinal);
-        Assert.DoesNotContain("presence.Address", peerSection, StringComparison.Ordinal);
+        Assert.True(refresh < lobby);
+        Assert.True(lobby < update);
+        Assert.DoesNotContain("GetHostPresenceAsync", source, StringComparison.Ordinal);
+        Assert.DoesNotContain("StewardRemoteHostPresence", source, StringComparison.Ordinal);
+        Assert.DoesNotContain("presence.Address", source, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -131,17 +131,21 @@ public sealed class PeerWorldJoinCutoverCompositionTests
     }
 
     [Fact]
-    public void LegacyRemoteJoinRemainsBelowPeerBranchDuringMigration()
+    public void SharedWorldWithoutCanonicalPeerAuthorityFailsClosedInsteadOfUsingBackendJoin()
     {
         var source = ReadJoin();
-        var peerJoin = RequiredIndex(source, "await JoinPeerWorldAsync(world, peerAdapter);");
-        var remoteRuntime = RequiredIndex(source, "var runtime = _remoteRuntime;", peerJoin);
-        var remotePresence = RequiredIndex(source, "runtime.GetHostPresenceAsync(world.Id)", remoteRuntime);
-        var remoteJoin = RequiredIndex(source, "await runtime.Join.JoinAsync(", remotePresence);
+        var update = RequiredIndex(source, "private void UpdateWorldJoinActionState()");
+        var peer = RequiredIndex(source, "if (_peerWorldIds.Contains(world.Id))", update);
+        var unavailable = RequiredIndex(
+            source,
+            "This shared World has no canonical peer authority on this device.",
+            peer);
 
-        Assert.True(peerJoin < remoteRuntime);
-        Assert.True(remoteRuntime < remotePresence);
-        Assert.True(remotePresence < remoteJoin);
+        Assert.True(update < peer);
+        Assert.True(peer < unavailable);
+        Assert.DoesNotContain("runtime.Join.JoinAsync", source, StringComparison.Ordinal);
+        Assert.DoesNotContain("DirectConnect", source, StringComparison.Ordinal);
+        Assert.DoesNotContain("SharedWorlds.Infrastructure.Remote", source, StringComparison.Ordinal);
     }
 
     private static string ReadJoin()

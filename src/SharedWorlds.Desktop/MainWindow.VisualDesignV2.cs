@@ -256,17 +256,6 @@ public partial class MainWindow
             description.MaxWidth = 680;
             description.Margin = new Thickness(0, 7, 0, 26);
         }
-
-        if (_invitationsButton is not null)
-        {
-            _invitationsButton.Width = double.NaN;
-            _invitationsButton.MinWidth = 104;
-            _invitationsButton.Height = 38;
-            if (TryFindResource("GhostButtonStyle") is Style ghostStyle)
-            {
-                _invitationsButton.Style = ghostStyle;
-            }
-        }
     }
 
     private void ApplySettingsSurfaceDesignV2()

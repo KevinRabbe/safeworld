@@ -1,17 +1,18 @@
+using System.Globalization;
 using System.IO;
+using System.Text.Json;
 
 namespace SharedWorlds.Desktop;
 
 /// <summary>
-/// SafeWorld release-facing Steam configuration boundary. New packages use SafeWorld names while
-/// older engineering packages remain readable through the qualified legacy parser.
+/// SafeWorld release-facing Steam configuration boundary. Only canonical SafeWorld inputs are accepted.
 /// </summary>
 internal sealed record SafeWorldDesktopSteamConfiguration(uint AppId)
 {
     internal const string PackageConfigurationFileName = "safeworld-steam.json";
     internal const string SteamAppIdVariable = "SAFEWORLD_STEAM_APP_ID";
-    private const string LegacyPackageConfigurationFileName = "steward-steam.json";
-    private const string LegacySteamAppIdVariable = "STEWARD_STEAM_APP_ID";
+    private const int SchemaVersion = 1;
+    private const int MaximumConfigurationBytes = 1024;
 
     public static bool TryLoad(
         out SafeWorldDesktopSteamConfiguration? configuration,
@@ -19,60 +20,163 @@ internal sealed record SafeWorldDesktopSteamConfiguration(uint AppId)
     {
         configuration = null;
 
-        var canonicalPath = Path.Combine(
+        var packagePath = Path.Combine(
             AppContext.BaseDirectory,
             PackageConfigurationFileName);
-        var canonicalEnvironmentAppId = Environment.GetEnvironmentVariable(
+        var environmentAppId = Environment.GetEnvironmentVariable(
             SteamAppIdVariable);
-        var legacyPath = Path.Combine(
-            AppContext.BaseDirectory,
-            LegacyPackageConfigurationFileName);
-        var legacyEnvironmentAppId = Environment.GetEnvironmentVariable(
-            LegacySteamAppIdVariable);
 
-        var configuredSourceCount = 0;
-        configuredSourceCount += File.Exists(canonicalPath) ? 1 : 0;
-        configuredSourceCount += string.IsNullOrWhiteSpace(canonicalEnvironmentAppId) ? 0 : 1;
-        configuredSourceCount += File.Exists(legacyPath) ? 1 : 0;
-        configuredSourceCount += string.IsNullOrWhiteSpace(legacyEnvironmentAppId) ? 0 : 1;
-        if (configuredSourceCount > 1)
+        var packageConfigured = File.Exists(packagePath);
+        var environmentConfigured = !string.IsNullOrWhiteSpace(environmentAppId);
+        if (packageConfigured && environmentConfigured)
         {
             problem =
-                "Steam platform configuration is ambiguous. Configure exactly one SafeWorld or legacy AppID source.";
+                "Steam platform configuration is ambiguous. Configure exactly one SafeWorld AppID source.";
             return false;
         }
 
-        StewardDesktopSteamConfiguration? parsed;
-        if (File.Exists(canonicalPath) ||
-            !string.IsNullOrWhiteSpace(canonicalEnvironmentAppId))
+        if (environmentConfigured)
         {
-            if (!StewardDesktopSteamConfiguration.TryLoad(
-                canonicalPath,
-                canonicalEnvironmentAppId,
-                out parsed,
-                out problem))
+            if (!TryParsePositiveAppId(environmentAppId, out var appId))
             {
+                problem = $"{SteamAppIdVariable} must be a positive Steam AppID.";
                 return false;
             }
-        }
-        else
-        {
-            if (!StewardDesktopSteamConfiguration.TryLoad(
-                out parsed,
-                out problem))
-            {
-                return false;
-            }
-        }
 
-        if (parsed is null)
-        {
+            configuration = new SafeWorldDesktopSteamConfiguration(appId);
             problem = null;
-            return false;
+            return true;
         }
 
-        configuration = new SafeWorldDesktopSteamConfiguration(parsed.AppId);
+        if (packageConfigured)
+        {
+            return TryLoadPackage(
+                packagePath,
+                out configuration,
+                out problem);
+        }
+
         problem = null;
-        return true;
+        return false;
     }
+
+    private static bool TryLoadPackage(
+        string path,
+        out SafeWorldDesktopSteamConfiguration? configuration,
+        out string? problem)
+    {
+        configuration = null;
+        try
+        {
+            var file = new FileInfo(Path.GetFullPath(path));
+            file.Refresh();
+            if (!file.Exists)
+            {
+                problem = null;
+                return false;
+            }
+
+            if ((file.Attributes & FileAttributes.ReparsePoint) != 0)
+            {
+                problem = $"{PackageConfigurationFileName} must be a regular file, not a linked file.";
+                return false;
+            }
+
+            if (file.Length is <= 0 or > MaximumConfigurationBytes)
+            {
+                problem = $"{PackageConfigurationFileName} has an invalid size.";
+                return false;
+            }
+
+            var bytes = File.ReadAllBytes(file.FullName);
+            if (bytes.Length is <= 0 or > MaximumConfigurationBytes)
+            {
+                problem = $"{PackageConfigurationFileName} has an invalid size.";
+                return false;
+            }
+
+            using var document = JsonDocument.Parse(
+                bytes,
+                new JsonDocumentOptions
+                {
+                    AllowTrailingCommas = false,
+                    CommentHandling = JsonCommentHandling.Disallow,
+                    MaxDepth = 3
+                });
+            if (document.RootElement.ValueKind != JsonValueKind.Object)
+            {
+                problem = $"{PackageConfigurationFileName} must contain one JSON object.";
+                return false;
+            }
+
+            int? schemaVersion = null;
+            uint? appId = null;
+            foreach (var property in document.RootElement.EnumerateObject())
+            {
+                switch (property.Name)
+                {
+                    case "schemaVersion":
+                        if (schemaVersion is not null ||
+                            property.Value.ValueKind != JsonValueKind.Number ||
+                            !property.Value.TryGetInt32(out var parsedSchemaVersion))
+                        {
+                            problem = $"{PackageConfigurationFileName} contains an invalid schemaVersion.";
+                            return false;
+                        }
+
+                        schemaVersion = parsedSchemaVersion;
+                        break;
+                    case "steamAppId":
+                        if (appId is not null ||
+                            property.Value.ValueKind != JsonValueKind.Number ||
+                            !property.Value.TryGetUInt32(out var parsedAppId))
+                        {
+                            problem = $"{PackageConfigurationFileName} contains an invalid steamAppId.";
+                            return false;
+                        }
+
+                        appId = parsedAppId;
+                        break;
+                    default:
+                        problem = $"{PackageConfigurationFileName} contains unsupported field '{property.Name}'.";
+                        return false;
+                }
+            }
+
+            if (schemaVersion != SchemaVersion)
+            {
+                problem = $"{PackageConfigurationFileName} uses an unsupported schema version.";
+                return false;
+            }
+
+            if (appId is null or 0)
+            {
+                problem = $"{PackageConfigurationFileName} must contain a positive steamAppId.";
+                return false;
+            }
+
+            configuration = new SafeWorldDesktopSteamConfiguration(appId.Value);
+            problem = null;
+            return true;
+        }
+        catch (Exception exception) when (
+            exception is IOException or
+            UnauthorizedAccessException or
+            JsonException or
+            NotSupportedException)
+        {
+            problem = $"{PackageConfigurationFileName} could not be read safely: {exception.Message}";
+            return false;
+        }
+    }
+
+    private static bool TryParsePositiveAppId(
+        string? text,
+        out uint appId)
+        => uint.TryParse(
+               text,
+               NumberStyles.None,
+               CultureInfo.InvariantCulture,
+               out appId) &&
+           appId != 0;
 }

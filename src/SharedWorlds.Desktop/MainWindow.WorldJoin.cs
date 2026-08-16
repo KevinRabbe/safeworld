@@ -6,7 +6,6 @@ using System.Windows.Threading;
 using SharedWorlds.Core.Abstractions;
 using SharedWorlds.Core.Domain;
 using SharedWorlds.Core.Worlds;
-using SharedWorlds.Infrastructure.Remote;
 using SharedWorlds.Infrastructure.Sessions;
 using Steamworks;
 
@@ -17,9 +16,6 @@ public partial class MainWindow
     private Button? _joinButton;
     private TextBlock? _joinReadinessText;
     private DispatcherTimer? _joinPresenceTimer;
-    private StewardRemoteHostPresence? _selectedHostPresence;
-    private Exception? _selectedHostPresenceError;
-    private WorldId? _selectedHostPresenceWorldId;
     private PeerWorldLobbySnapshot? _selectedPeerLobby;
     private Exception? _selectedPeerLobbyError;
     private WorldId? _selectedPeerLobbyWorldId;
@@ -181,68 +177,14 @@ public partial class MainWindow
             return;
         }
 
-        if (_peerWorldIds.Contains(world.Id))
-        {
-            if (!TryGetAdapter(world.GameAdapterId, out var peerAdapter))
-            {
-                return;
-            }
-
-            await JoinPeerWorldAsync(world, peerAdapter);
-            return;
-        }
-
-        var runtime = _remoteRuntime;
-        var displayedPresence = _selectedHostPresenceWorldId == world.Id
-            ? _selectedHostPresence
-            : null;
-        if (runtime is null ||
-            !_remoteWorldIds.Contains(world.Id) ||
-            displayedPresence?.State != StewardRemoteHostPresenceState.Ready ||
-            string.IsNullOrWhiteSpace(displayedPresence.Address) ||
+        if (!_peerWorldIds.Contains(world.Id) ||
             !TryGetAdapter(world.GameAdapterId, out var adapter))
         {
+            UpdateWorldJoinActionState();
             return;
         }
 
-        if (!adapter.Capabilities.HasFlag(GameAdapterCapabilities.AutomaticClientJoin))
-        {
-            StatusText.Text = $"{adapter.DisplayName} does not support Steward-managed Join yet.";
-            return;
-        }
-
-        await RunUnifiedOperationAsync(
-            $"Joining {world.Name}...",
-            async () =>
-            {
-                // Local environment selection may take time. Re-read host presence only after that
-                // work, immediately before launch, so the 10-second presentation cache can never be
-                // treated as current multiplayer authority after a reservation reclaim.
-                var installation = await GetReadyInstallationForWorldAsync(world, adapter);
-                var presence = await runtime.GetHostPresenceAsync(world.Id);
-                _selectedHostPresence = presence;
-                _selectedHostPresenceError = null;
-                _selectedHostPresenceWorldId = world.Id;
-
-                if (presence?.State != StewardRemoteHostPresenceState.Ready ||
-                    string.IsNullOrWhiteSpace(presence.Address))
-                {
-                    throw new InvalidOperationException(
-                        "The host is no longer ready to join. Steward did not launch the client against stale host information.");
-                }
-
-                await runtime.Join.JoinAsync(
-                    world.Id,
-                    adapter,
-                    installation,
-                    new HostConnection(
-                        presence.Address,
-                        presence.Port,
-                        presence.JoinToken));
-                StatusText.Text = $"Left hosted World '{world.Name}'.";
-            });
-
-        await RefreshSelectedWorldHostPresenceAsync();
+        await JoinPeerWorldAsync(world, adapter);
     }
 
     private async Task JoinPeerWorldAsync(
@@ -368,76 +310,29 @@ public partial class MainWindow
         if (_joinPresenceRefreshInProgress)
         {
             // Selection/timer refreshes are coalesced instead of dropped. In particular, if World B
-            // is selected while World A is awaiting presence, A's stale result is discarded and B is
-            // refreshed immediately after the in-flight request releases ownership.
+            // is selected while World A is awaiting lobby state, A's stale result is discarded and B
+            // is refreshed immediately after the in-flight request releases ownership.
             _joinPresenceRefreshPending = true;
             return;
         }
 
         var world = _selectedWorld;
         var refreshVersion = ++_hostPresenceRefreshVersion;
-        _selectedHostPresence = null;
-        _selectedHostPresenceError = null;
-        _selectedHostPresenceWorldId = world?.Id;
         _selectedPeerLobby = null;
         _selectedPeerLobbyError = null;
         _selectedPeerLobbyWorldId = world?.Id;
         UpdateWorldJoinActionState();
 
         if (world is null ||
+            !_peerWorldIds.Contains(world.Id) ||
             !TryGetAdapter(world.GameAdapterId, out var adapter) ||
             !SupportsJoinPresentation(adapter))
         {
             return;
         }
 
-        if (_peerWorldIds.Contains(world.Id))
-        {
-            var peerRuntime = _peerRuntime;
-            if (peerRuntime is null)
-            {
-                return;
-            }
-
-            _joinPresenceRefreshInProgress = true;
-            try
-            {
-                PeerWorldLobbySnapshot? snapshot = null;
-                Exception? failure = null;
-                try
-                {
-                    snapshot = await peerRuntime.Lobby.GetAsync(world.Id);
-                }
-                catch (Exception exception) when (IsPeerJoinAvailabilityFailure(exception))
-                {
-                    failure = exception;
-                }
-
-                if (refreshVersion == _hostPresenceRefreshVersion &&
-                    _selectedWorld?.Id == world.Id)
-                {
-                    _selectedPeerLobby = snapshot;
-                    _selectedPeerLobbyError = failure;
-                    _selectedPeerLobbyWorldId = world.Id;
-                }
-            }
-            finally
-            {
-                _joinPresenceRefreshInProgress = false;
-                UpdateWorldJoinActionState();
-            }
-
-            if (_joinPresenceRefreshPending)
-            {
-                _joinPresenceRefreshPending = false;
-                await RefreshSelectedWorldHostPresenceAsync();
-            }
-
-            return;
-        }
-
-        var runtime = _remoteRuntime;
-        if (runtime is null || !_remoteWorldIds.Contains(world.Id))
+        var peerRuntime = _peerRuntime;
+        if (peerRuntime is null)
         {
             return;
         }
@@ -445,22 +340,23 @@ public partial class MainWindow
         _joinPresenceRefreshInProgress = true;
         try
         {
-            StewardRemoteHostPresence? presence = null;
+            PeerWorldLobbySnapshot? snapshot = null;
             Exception? failure = null;
             try
             {
-                presence = await runtime.GetHostPresenceAsync(world.Id);
+                snapshot = await peerRuntime.Lobby.GetAsync(world.Id);
             }
-            catch (Exception exception) when (IsRemoteAvailabilityFailure(exception))
+            catch (Exception exception) when (IsPeerJoinAvailabilityFailure(exception))
             {
                 failure = exception;
             }
 
-            if (refreshVersion == _hostPresenceRefreshVersion && _selectedWorld?.Id == world.Id)
+            if (refreshVersion == _hostPresenceRefreshVersion &&
+                _selectedWorld?.Id == world.Id)
             {
-                _selectedHostPresence = presence;
-                _selectedHostPresenceError = failure;
-                _selectedHostPresenceWorldId = world.Id;
+                _selectedPeerLobby = snapshot;
+                _selectedPeerLobbyError = failure;
+                _selectedPeerLobbyWorldId = world.Id;
             }
         }
         finally
@@ -497,104 +393,12 @@ public partial class MainWindow
             return;
         }
 
-        if (!_remoteWorldIds.Contains(world.Id))
-        {
-            SetJoinAvailability(
-                button,
-                false,
-                world.SharingMode == WorldSharingMode.Shared
-                    ? "Reconnect Steward to check whether this shared World has a ready host."
-                    : "Join is available for shared Worlds when another device is hosting.");
-            return;
-        }
-
-        if (!TryGetAdapter(world.GameAdapterId, out var adapter) ||
-            !SupportsJoinPresentation(adapter))
-        {
-            SetJoinAvailability(
-                button,
-                false,
-                $"{adapter?.DisplayName ?? world.GameAdapterId} does not support one-click or native direct-connect Join yet.");
-            return;
-        }
-
-        if (_remoteRuntime is null)
-        {
-            SetJoinAvailability(
-                button,
-                false,
-                "Reconnect Steward to check whether a host is ready.");
-            return;
-        }
-
-        if (!IsSelectedWorldEnvironmentReadyForPlay())
-        {
-            SetJoinAvailability(
-                button,
-                false,
-                "Verify this World's exact environment before joining.");
-            return;
-        }
-
-        if (_selectedHostPresenceError is not null)
-        {
-            SetJoinAvailability(button, false, "Steward cannot check host readiness right now.");
-            return;
-        }
-
-        var presence = _selectedHostPresenceWorldId == world.Id
-            ? _selectedHostPresence
-            : null;
-        if (presence is null)
-        {
-            SetJoinAvailability(button, false, "No one is hosting this World right now.");
-            return;
-        }
-
-        if (presence.State == StewardRemoteHostPresenceState.Starting)
-        {
-            SetJoinAvailability(
-                button,
-                false,
-                "A host is starting. Join will become available when it is ready.");
-            return;
-        }
-
-        if (string.IsNullOrWhiteSpace(presence.Address))
-        {
-            SetJoinAvailability(button, false, "The host is not ready to accept connections yet.");
-            return;
-        }
-
-        if (!adapter.Capabilities.HasFlag(GameAdapterCapabilities.AutomaticClientJoin) &&
-            adapter is IManualDirectConnectProvider manualDirectConnect)
-        {
-            try
-            {
-                var guidance = manualDirectConnect.GetManualDirectConnectInstruction(
-                    new HostConnection(
-                        presence.Address,
-                        presence.Port,
-                        presence.JoinToken));
-                SetJoinAvailability(button, false, guidance.Instruction);
-            }
-            catch (InvalidOperationException)
-            {
-                SetJoinAvailability(
-                    button,
-                    false,
-                    "The host is ready, but it did not publish a complete native direct-connect endpoint.");
-            }
-
-            return;
-        }
-
         SetJoinAvailability(
             button,
-            !_isBusy,
-            _isBusy
-                ? "Another Steward operation is in progress."
-                : "A host is ready. You can join now.");
+            false,
+            world.SharingMode == WorldSharingMode.Shared
+                ? "This shared World has no canonical peer authority on this device. Import or migrate it into the peer product before joining."
+                : "Join is available for shared peer Worlds when another member is hosting.");
     }
 
     private void UpdatePeerWorldJoinActionState(Button button, World world)
@@ -682,8 +486,7 @@ public partial class MainWindow
     private static bool SupportsJoinPresentation(IGameAdapter adapter)
     {
         ArgumentNullException.ThrowIfNull(adapter);
-        return adapter.Capabilities.HasFlag(GameAdapterCapabilities.AutomaticClientJoin) ||
-               adapter is IManualDirectConnectProvider;
+        return adapter.Capabilities.HasFlag(GameAdapterCapabilities.AutomaticClientJoin);
     }
 
     private static bool SamePeerIdentity(UserIdentity left, UserIdentity right)

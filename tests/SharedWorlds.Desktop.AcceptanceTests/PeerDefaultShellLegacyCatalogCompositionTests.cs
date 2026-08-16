@@ -4,82 +4,114 @@ namespace SharedWorlds.Desktop.AcceptanceTests;
 
 public sealed class PeerDefaultShellLegacyCatalogCompositionTests
 {
-    [Fact]
-    public void OwnedPrivateCatalogPresentationHooksAndBringHereInitializeOnlyAfterRemoteSessionDecision()
-    {
-        var source = ReadStartup();
-        var remoteSession = RequiredIndex(source, "await InitializeStewardRemoteSessionAsync();");
-        var legacyComment = RequiredIndex(source, "Owned-private catalog and Bring Here are legacy backend reservation/location workflows.", remoteSession);
-        var guard = RequiredIndex(source, "if (_remoteRuntime is not null)", legacyComment);
-        var catalogUi = RequiredIndex(source, "InitializeOwnedPrivateWorldCatalogUi();", guard);
-        var catalogHooks = RequiredIndex(source, "InitializeOwnedPrivateWorldCatalogRefreshHooks();", catalogUi);
-        var bringHere = RequiredIndex(source, "InitializeOwnedPrivateWorldBringHereAction();", catalogHooks);
-        var guardEnd = RequiredIndex(source, "}\n\n        UpdateWorldSharingActionState();", bringHere);
+    private static readonly string[] RetiredDesktopBackendPaths =
+    [
+        "src/SharedWorlds.Desktop/MainWindow.OwnedPrivateWorldBringHere.cs",
+        "src/SharedWorlds.Desktop/MainWindow.OwnedPrivateWorldCatalog.cs",
+        "src/SharedWorlds.Desktop/MainWindow.OwnedWorldLocationPublication.cs",
+        "src/SharedWorlds.Desktop/MainWindow.RemoteRuntime.cs",
+        "src/SharedWorlds.Desktop/StewardDesktopRemoteRuntime.cs",
+        "src/SharedWorlds.Desktop/WorldAccessDialog.cs",
+        "src/SharedWorlds.Desktop/MainWindow.WorldInvitations.cs",
+        "src/SharedWorlds.Desktop/MainWindow.LobbyInvitationsPresentation.cs",
+        "src/SharedWorlds.Desktop/PendingInvitationsDialog.cs",
+        "src/SharedWorlds.Desktop/CoordinatedJoinGameAdapter.cs",
+        "src/SharedWorlds.Desktop/CoordinatedWorldJoinService.cs"
+    ];
 
-        Assert.True(remoteSession < legacyComment);
-        Assert.True(legacyComment < guard);
-        Assert.True(guard < catalogUi);
-        Assert.True(catalogUi < catalogHooks);
-        Assert.True(catalogHooks < bringHere);
-        Assert.True(bringHere < guardEnd);
+    private static readonly string[] RetiredLiveBackendSymbols =
+    [
+        "SharedWorlds.Infrastructure.Remote",
+        "_remoteRuntime",
+        "_remoteWorldIds",
+        "StewardRemoteHostPresence",
+        "StewardDesktopRemoteRuntime",
+        "StewardWorldPlayerPresenceClient"
+    ];
+
+    [Fact]
+    public void LegacyBackendRuntimeAndOwnedPrivateDesktopSourcesAreAbsent()
+    {
+        var root = FindRepositoryRoot();
+
+        foreach (var relativePath in RetiredDesktopBackendPaths)
+        {
+            Assert.False(
+                File.Exists(Path.Combine(root, relativePath)),
+                $"Retired Desktop backend source '{relativePath}' must not re-enter the SafeWorld product assembly.");
+        }
     }
 
     [Fact]
-    public void PeerDefaultConstructorDoesNotBuildLegacyOwnedPrivateCatalogPresentation()
+    public void DesktopSourceTreeContainsNoLiveBackendAuthoritySymbols()
+    {
+        var root = FindRepositoryRoot();
+        var desktopRoot = Path.Combine(root, "src", "SharedWorlds.Desktop");
+
+        foreach (var file in Directory.EnumerateFiles(desktopRoot, "*.cs", SearchOption.AllDirectories))
+        {
+            var source = File.ReadAllText(file);
+            foreach (var retiredSymbol in RetiredLiveBackendSymbols)
+            {
+                Assert.DoesNotContain(retiredSymbol, source, StringComparison.Ordinal);
+            }
+        }
+    }
+
+    [Fact]
+    public void MainWindowOwnsNoLegacyBackendPublicationOrCatalogState()
     {
         var source = ReadRepositoryFile("src/SharedWorlds.Desktop/MainWindow.xaml.cs");
-        var constructor = RequiredIndex(source, "public MainWindow()");
-        var constructorEnd = RequiredIndex(source, "private void InitializeLiveRegionAnnouncements()", constructor);
-        var body = source[constructor..constructorEnd];
 
-        Assert.DoesNotContain("InitializeOwnedPrivateWorldCatalogUi", body, StringComparison.Ordinal);
+        Assert.DoesNotContain("SharedWorlds.Infrastructure.Remote", source, StringComparison.Ordinal);
+        Assert.DoesNotContain("_ownedWorldLocation", source, StringComparison.Ordinal);
+        Assert.DoesNotContain("DisposeOwnedWorldLocationMigrationState", source, StringComparison.Ordinal);
+        Assert.DoesNotContain("DisposeRemoteRuntime", source, StringComparison.Ordinal);
+        Assert.DoesNotContain("SetOwnedPrivateWorldCatalogBusyState", source, StringComparison.Ordinal);
     }
 
     [Fact]
-    public void PeerDefaultStartupCannotConstructOrRegisterLegacyOwnedLocationSurfaceBeforeRemoteRuntimeExists()
+    public void NormalPeerStartupHasNoLegacyBackendCompositionEntryPoint()
     {
         var source = ReadStartup();
-        var remoteSession = RequiredIndex(source, "await InitializeStewardRemoteSessionAsync();");
-        var preRemote = source[..remoteSession];
 
-        Assert.DoesNotContain("InitializeOwnedPrivateWorldCatalogUi", preRemote, StringComparison.Ordinal);
-        Assert.DoesNotContain("InitializeOwnedPrivateWorldCatalogRefreshHooks", preRemote, StringComparison.Ordinal);
-        Assert.DoesNotContain("InitializeOwnedPrivateWorldBringHereAction", preRemote, StringComparison.Ordinal);
+        Assert.DoesNotContain("InitializeOwnedPrivateWorldCatalogUi", source, StringComparison.Ordinal);
+        Assert.DoesNotContain("InitializeOwnedPrivateWorldCatalogRefreshHooks", source, StringComparison.Ordinal);
+        Assert.DoesNotContain("InitializeOwnedPrivateWorldBringHereAction", source, StringComparison.Ordinal);
+        Assert.DoesNotContain("InitializeStewardRemoteSessionAsync", source, StringComparison.Ordinal);
+        Assert.DoesNotContain("_remoteRuntime", source, StringComparison.Ordinal);
     }
 
     [Fact]
-    public void PeerRuntimeAndCoreWorldUiRemainIndependentOfLegacyCatalogGuard()
+    public void PeerRuntimeAndCoreWorldUiComposeWithoutLegacyCatalogDecision()
     {
         var source = ReadStartup();
         var peerRuntime = RequiredIndex(source, "InitializeStewardPeerRuntime();");
         var gameUi = RequiredIndex(source, "await InitializeUnifiedGameUiAsync();", peerRuntime);
         var sharing = RequiredIndex(source, "InitializeWorldSharingUi();", gameUi);
-        var remoteSession = RequiredIndex(source, "await InitializeStewardRemoteSessionAsync();", sharing);
-        var join = RequiredIndex(source, "await InitializeWorldJoinUiAsync();", remoteSession);
+        var join = RequiredIndex(source, "await InitializeWorldJoinUiAsync();", sharing);
 
         Assert.True(peerRuntime < gameUi);
         Assert.True(gameUi < sharing);
-        Assert.True(sharing < remoteSession);
-        Assert.True(remoteSession < join);
+        Assert.True(sharing < join);
     }
 
     [Fact]
-    public void LegacyCatalogGuardDoesNotGateSteamInviteJoinPath()
+    public void SteamInviteJoinPathDoesNotDependOnLegacyCatalogSurface()
     {
         var source = ReadStartup();
-        var bringHere = RequiredIndex(source, "InitializeOwnedPrivateWorldBringHereAction();");
-        var join = RequiredIndex(source, "await InitializeWorldJoinUiAsync();", bringHere);
+        var join = RequiredIndex(source, "await InitializeWorldJoinUiAsync();");
         var coldJoin = RequiredIndex(source, "InitializeSteamLobbyLaunchRequest();", join);
 
-        Assert.True(bringHere < join);
         Assert.True(join < coldJoin);
+        Assert.DoesNotContain("InitializeOwnedPrivateWorldBringHereAction", source, StringComparison.Ordinal);
     }
 
     private static string ReadStartup()
         => ReadRepositoryFile("src/SharedWorlds.Desktop/MainWindow.UnifiedStartup.cs");
 
     private static string ReadRepositoryFile(string relativePath)
-        => File.ReadAllText(FindRepositoryFile(relativePath));
+        => File.ReadAllText(Path.Combine(FindRepositoryRoot(), relativePath));
 
     private static int RequiredIndex(string source, string value, int startIndex = 0)
     {
@@ -88,29 +120,25 @@ public sealed class PeerDefaultShellLegacyCatalogCompositionTests
         return index;
     }
 
-    private static string FindRepositoryFile(string relativePath)
+    private static string FindRepositoryRoot()
     {
         var workspace = Environment.GetEnvironmentVariable("GITHUB_WORKSPACE");
-        if (!string.IsNullOrWhiteSpace(workspace))
+        if (!string.IsNullOrWhiteSpace(workspace) &&
+            File.Exists(Path.Combine(workspace, "SharedWorlds.sln")))
         {
-            var candidate = Path.Combine(workspace, relativePath);
-            if (File.Exists(candidate))
-            {
-                return candidate;
-            }
+            return workspace;
         }
 
         for (var directory = new DirectoryInfo(AppContext.BaseDirectory);
              directory is not null;
              directory = directory.Parent)
         {
-            var candidate = Path.Combine(directory.FullName, relativePath);
-            if (File.Exists(candidate))
+            if (File.Exists(Path.Combine(directory.FullName, "SharedWorlds.sln")))
             {
-                return candidate;
+                return directory.FullName;
             }
         }
 
-        throw new FileNotFoundException($"Could not locate repository file '{relativePath}'.");
+        throw new DirectoryNotFoundException("Could not locate the SafeWorld repository root.");
     }
 }

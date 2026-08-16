@@ -9,7 +9,6 @@ using SharedWorlds.Core.Domain;
 using SharedWorlds.Core.Storage;
 using SharedWorlds.Core.Worlds;
 using SharedWorlds.Infrastructure.Diagnostics;
-using SharedWorlds.Infrastructure.Remote;
 using SharedWorlds.Infrastructure.Sessions;
 using SharedWorlds.Infrastructure.Storage;
 
@@ -19,10 +18,6 @@ public partial class MainWindow : Window
 {
     private readonly IWorldStorage _storage;
     private readonly string _storageRoot;
-    private readonly object _ownedWorldLocationMigrationStateGate = new();
-    private IOwnedWorldLocationPublicationJournal? _ownedWorldLocationPublicationJournal;
-    private StewardOwnedWorldLocationPublicationTrigger? _ownedWorldLocationPublicationTrigger;
-    private readonly SemaphoreSlim _ownedWorldLocationPublicationGate = new(1, 1);
     private readonly LocalWorldSessionCoordinator _localSessionCoordinator;
     private readonly ManagedWritableSessionGate _localManagedSessionGate;
     private readonly WorldLifecycleService _lifecycle;
@@ -44,14 +39,12 @@ public partial class MainWindow : Window
         InitializeGameTechnicalReadinessUi();
 
         // App resolves/migrates the one durable local root while it owns the desktop single-instance
-        // boundary, before this window can construct any storage/runtime writer. From here on every
-        // SafeWorld-owned location comes from one explicit storage layout.
+        // boundary, before this window can construct any storage/runtime writer. Normal SafeWorld
+        // composition owns local storage directly and peer authority is layered over that canonical root.
         var storageLayout = DesktopStorageLayout.FromResolvedRoot();
         _storageRoot = storageLayout.WorldDataRoot;
         var localStorage = new LocalWorldStorage(_storageRoot);
-        _storage = new OwnedWorldLocationObservedWorldStorage(
-            localStorage,
-            RequestOwnedWorldLocationPublication);
+        _storage = localStorage;
         _workspaceRecoveryStore = new LocalWorkspaceRecoveryStore(_storageRoot);
         _localSessionCoordinator = new LocalWorldSessionCoordinator();
         _localManagedSessionGate = new ManagedWritableSessionGate();
@@ -64,11 +57,6 @@ public partial class MainWindow : Window
             new ManagedWorkspaceStorage(storageLayout.ManagedWorkspacesRoot));
         _deviceSettingsStore = new DeviceSettingsStore(storageLayout.DeviceSettingsPath);
 
-        Closed += (_, _) =>
-        {
-            DisposeOwnedWorldLocationMigrationState();
-            DisposeRemoteRuntime();
-        };
         InitializeTray();
     }
 
@@ -109,7 +97,7 @@ public partial class MainWindow : Window
             exception is IOException or UnauthorizedAccessException or JsonException)
         {
             // The fallback keeps local UI behavior usable, but its generated installation ID is not
-            // durable. Never use it for installation-bound remote identity/authority.
+            // durable. Never use it for installation-bound peer identity/authority.
             _deviceSettings = DeviceSettingsStore.CreateInitial(hasManagedWorlds: false);
             ShowError(
                 "Could not load device settings",
@@ -224,7 +212,6 @@ public partial class MainWindow : Window
         BackToGamesButton.IsEnabled = !isBusy;
         AllowHostingCheckBox.IsEnabled = !isBusy;
         WorldList.IsEnabled = !isBusy;
-        SetOwnedPrivateWorldCatalogBusyState(isBusy);
         UpdateNativeWorldCreationActionState();
         UpdateUnifiedActionState();
         UpdateUnifiedImportActionState();

@@ -26,7 +26,7 @@ public sealed class SafeWorldSidebarAndDeletionPresentationTests
     }
 
     [Fact]
-    public void IncompleteSharedLocalRecordCanAbandonDurableResponsibilityAndBeRemoved()
+    public void PrePeerSharedLocalRecordCanAbandonDurableResponsibilityAndBeRemovedWithoutBackend()
     {
         var deletion = File.ReadAllText(FindRepositoryFile(
             "src/SharedWorlds.Desktop/MainWindow.WorldDeletion.cs"));
@@ -38,19 +38,20 @@ public sealed class SafeWorldSidebarAndDeletionPresentationTests
             "src/SharedWorlds.Infrastructure/Storage/LocalWorldStorage.cs"));
 
         Assert.Contains("InitializeWorldDeletionUi();", startup, StringComparison.Ordinal);
-        Assert.Contains("var isLocalCatalogRecord = world is not null && !_remoteWorldIds.Contains(world.Id);", deletion, StringComparison.Ordinal);
-        Assert.Contains("var incompleteSharedRecord = world.SharingMode == WorldSharingMode.Shared;", deletion, StringComparison.Ordinal);
+        Assert.Contains("var canOfferLocalRemoval = world is not null && !isPersistentPeerWorld;", deletion, StringComparison.Ordinal);
+        Assert.Contains("world.SharingMode == WorldSharingMode.Shared &&\n            world.PeerAuthority is null", deletion, StringComparison.Ordinal);
         Assert.Contains("canAbandonDurableResponsibility", deletion, StringComparison.Ordinal);
         Assert.Contains("WorldLifecycleResponsibilityKind.InterruptedSession", deletion, StringComparison.Ordinal);
         Assert.Contains("WorldLifecycleResponsibilityKind.RecoveryNeeded", deletion, StringComparison.Ordinal);
         Assert.Contains("WorldLifecycleResponsibilityKind.CleanupPending", deletion, StringComparison.Ordinal);
-        Assert.Contains("Remove from Safe World", deletion, StringComparison.Ordinal);
-        Assert.Contains("This does not delete a shared World for other people", deletion, StringComparison.Ordinal);
+        Assert.Contains("Remove from SafeWorld", deletion, StringComparison.Ordinal);
+        Assert.Contains("No legacy service is contacted or modified", deletion, StringComparison.Ordinal);
         Assert.Contains("AbandonRecoveryRecordsForRemovedWorldAsync", deletion, StringComparison.Ordinal);
         Assert.Contains("Status = WorkspaceRecoveryStatus.Abandoned", deletion, StringComparison.Ordinal);
         Assert.Contains("This record no longer owns runtime responsibility", deletion, StringComparison.Ordinal);
         Assert.Contains("_storage.DeleteWorldAsync(worldId)", deletion, StringComparison.Ordinal);
-        Assert.Contains("_remoteIncompleteWorldIds.Remove(worldId);", deletion, StringComparison.Ordinal);
+        Assert.DoesNotContain("_remoteWorldIds", deletion, StringComparison.Ordinal);
+        Assert.DoesNotContain("_remoteIncompleteWorldIds", deletion, StringComparison.Ordinal);
         Assert.Contains("await InitializeRuntimeResponsibilityAsync();", deletion, StringComparison.Ordinal);
         Assert.Contains("Other Worlds are no longer blocked by it", deletion, StringComparison.Ordinal);
         Assert.Contains("game's own save folder", deletion, StringComparison.Ordinal);
@@ -59,6 +60,18 @@ public sealed class SafeWorldSidebarAndDeletionPresentationTests
         Assert.Contains("Directory.Move(worldDirectory, tombstone);", localStorage, StringComparison.Ordinal);
         Assert.Contains(".deleting-worlds", localStorage, StringComparison.Ordinal);
         Assert.Contains("FileAttributes.ReparsePoint", localStorage, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void PersistentPeerWorldCannotBypassLeaveAndAuthoritySafetyThroughRawDeletion()
+    {
+        var deletion = File.ReadAllText(FindRepositoryFile(
+            "src/SharedWorlds.Desktop/MainWindow.WorldDeletion.cs"));
+
+        Assert.Contains("var isPersistentPeerWorld = world?.PeerAuthority is not null;", deletion, StringComparison.Ordinal);
+        Assert.Contains("if (world.PeerAuthority is not null)", deletion, StringComparison.Ordinal);
+        Assert.Contains("must be left through Manage access", deletion, StringComparison.Ordinal);
+        Assert.Contains("membership and authority safety", deletion, StringComparison.Ordinal);
     }
 
     [Fact]

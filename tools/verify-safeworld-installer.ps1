@@ -13,6 +13,7 @@ if (-not [IO.File]::Exists($installer)) {
 }
 
 $installRoot = Join-Path $env:LOCALAPPDATA 'Programs/SafeWorld'
+$installedExecutable = Join-Path $installRoot 'SafeWorld.Desktop.exe'
 $uninstaller = Join-Path $installRoot 'Uninstall SafeWorld.exe'
 $startMenuShortcut = Join-Path $env:APPDATA 'Microsoft/Windows/Start Menu/Programs/SafeWorld/SafeWorld.lnk'
 $uninstallRegistryPath = 'Software\Microsoft\Windows\CurrentVersion\Uninstall\SafeWorld'
@@ -23,7 +24,7 @@ if ($installProcess.ExitCode -ne 0) {
 }
 
 foreach ($required in @(
-    (Join-Path $installRoot 'SafeWorld.Desktop.exe'),
+    $installedExecutable,
     $uninstaller,
     $startMenuShortcut)) {
     if (-not [IO.File]::Exists($required)) {
@@ -33,9 +34,14 @@ foreach ($required in @(
 if ([IO.File]::Exists((Join-Path $installRoot 'SharedWorlds.Desktop.exe'))) {
     throw 'Installed product exposes the engineering executable name.'
 }
+if ([IO.File]::Exists((Join-Path $installRoot 'safeworld-steam.json'))) {
+    throw 'Distribution-neutral installed product unexpectedly contains safeworld-steam.json.'
+}
+if ([IO.File]::Exists((Join-Path $installRoot 'steward-steam.json'))) {
+    throw 'Installed product unexpectedly contains legacy Steam configuration.'
+}
 
-using namespace Microsoft.Win32
-$uninstallKey = [Registry]::CurrentUser.OpenSubKey($uninstallRegistryPath, writable: false)
+$uninstallKey = [Microsoft.Win32.Registry]::CurrentUser.OpenSubKey($uninstallRegistryPath, $false)
 if ($null -eq $uninstallKey) {
     throw 'SafeWorld is not registered for uninstall in the current user profile.'
 }
@@ -51,9 +57,35 @@ finally {
     $uninstallKey.Dispose()
 }
 
-# SafeWorld World data is deliberately outside the application directory. A sentinel here proves
-# that uninstall removes application bytes and Windows integration without deleting persisted Worlds.
-$worldDataRoot = Join-Path $env:LOCALAPPDATA 'SharedWorlds'
+# Prove the installed distribution-neutral executable can actually start with no packaged Steam
+# AppID/configuration. Local SafeWorld must remain usable even when peer/Steam authority is absent.
+$safeWorldProcess = $null
+try {
+    $safeWorldProcess = Start-Process `
+        -FilePath $installedExecutable `
+        -WorkingDirectory $installRoot `
+        -PassThru
+    Start-Sleep -Seconds 5
+    $safeWorldProcess.Refresh()
+    if ($safeWorldProcess.HasExited) {
+        throw "Distribution-neutral SafeWorld exited during startup smoke test with code $($safeWorldProcess.ExitCode)."
+    }
+}
+finally {
+    if ($null -ne $safeWorldProcess) {
+        $safeWorldProcess.Refresh()
+        if (-not $safeWorldProcess.HasExited) {
+            Stop-Process -Id $safeWorldProcess.Id -Force
+            $safeWorldProcess.WaitForExit()
+        }
+        $safeWorldProcess.Dispose()
+    }
+}
+
+# SafeWorld World data is deliberately outside the application directory. A sentinel in the
+# canonical durable root proves uninstall removes application bytes and Windows integration
+# without deleting persisted Worlds.
+$worldDataRoot = Join-Path $env:LOCALAPPDATA 'SafeWorld'
 [IO.Directory]::CreateDirectory($worldDataRoot) | Out-Null
 $worldSentinel = Join-Path $worldDataRoot 'installer-preserves-world-data.txt'
 [IO.File]::WriteAllText($worldSentinel, 'preserve')
@@ -63,13 +95,13 @@ if ($uninstallProcess.ExitCode -ne 0) {
     throw "SafeWorld uninstaller exited with code $($uninstallProcess.ExitCode)."
 }
 
-if ([IO.File]::Exists((Join-Path $installRoot 'SafeWorld.Desktop.exe'))) {
+if ([IO.File]::Exists($installedExecutable)) {
     throw 'SafeWorld executable remains after uninstall.'
 }
 if ([IO.File]::Exists($startMenuShortcut)) {
     throw 'SafeWorld Start Menu shortcut remains after uninstall.'
 }
-$remainingUninstallKey = [Registry]::CurrentUser.OpenSubKey($uninstallRegistryPath, writable: false)
+$remainingUninstallKey = [Microsoft.Win32.Registry]::CurrentUser.OpenSubKey($uninstallRegistryPath, $false)
 if ($null -ne $remainingUninstallKey) {
     $remainingUninstallKey.Dispose()
     throw 'SafeWorld uninstall registration remains after uninstall.'
@@ -80,5 +112,6 @@ if (-not [IO.File]::Exists($worldSentinel)) {
 
 Write-Host '[OK] SafeWorld installer lifecycle verified.'
 Write-Host "  Install root: $installRoot"
+Write-Host '  Installed executable started successfully without packaged Steam configuration.'
 Write-Host '  Installed executable, Start Menu shortcut, and uninstall registration verified.'
 Write-Host '  Uninstall removed application integration and preserved external World data.'
